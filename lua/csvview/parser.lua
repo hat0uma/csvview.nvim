@@ -2,6 +2,10 @@ local M = {}
 
 local DELIM = string.byte(",")
 
+local config = {
+  async_chunksize = 50,
+}
+
 --- parse line
 ---@param line string
 ---@return string[]
@@ -51,6 +55,36 @@ function M.iter_lines(bufnr, startlnum, endlnum)
     i = i + 1
     return i, M.get_fields(bufnr, i)
   end
+end
+
+--- iterate fields async
+---@param bufnr integer
+---@param startlnum integer?
+---@param endlnum integer?
+---@param on_line fun( lnum:integer,columns:string[] )
+---@param on_end fun()
+function M.iter_lines_async(bufnr, startlnum, endlnum, on_line, on_end)
+  startlnum = startlnum or 1
+  endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
+
+  -- Run in small chunks to avoid blocking the main thread
+  local iter ---@type function
+  iter = function()
+    if startlnum >= endlnum then
+      on_end()
+      return
+    end
+
+    local batch = math.min(endlnum - startlnum, config.async_chunksize)
+    for i = startlnum, startlnum + batch do
+      on_line(i, M.get_fields(bufnr, i))
+    end
+    startlnum = startlnum + batch
+    -- vim.schedule(iter)
+    vim.defer_fn(iter, 1)
+  end
+
+  iter()
 end
 
 return M

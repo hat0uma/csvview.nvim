@@ -10,7 +10,7 @@ local enable_buffers = {}
 ---@param events { on_lines:function,on_reload:function}
 local function register_events(bufnr, events)
   ---  on :e
-  vim.b.csvview_update_auid = vim.api.nvim_create_autocmd({ "BufReadPost" }, {
+  vim.b[bufnr].csvview_update_auid = vim.api.nvim_create_autocmd({ "BufReadPost" }, {
     callback = function()
       register_events(bufnr, events)
       events.on_reload()
@@ -51,22 +51,22 @@ function M.enable()
   end
   table.insert(enable_buffers, bufnr)
 
-  local item
-  metrics.compute_csv_metrics(bufnr, function(csv)
-    item = csv
-    view.attach(bufnr, item)
+  local fields = {}
+  metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+    fields = f
+    view.attach(bufnr, fields, column_max_widths)
   end)
   register_events(bufnr, {
     on_lines = function(_, _, _, first, last)
-      item = metrics.compute_csv_metrics(bufnr, function(csv)
-        item = csv
-        view.update(bufnr, item)
-      end, first + 1, last + 1, item.fields)
+      metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+        fields = f
+        view.update(bufnr, fields, column_max_widths)
+      end, first + 1, last + 1, fields)
     end,
     on_reload = function()
-      item = metrics.compute_csv_metrics(bufnr, function(csv)
-        item = csv
-        view.update(bufnr, item)
+      metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+        fields = f
+        view.update(bufnr, fields, column_max_widths)
       end)
     end,
   })

@@ -173,13 +173,14 @@ local views = {}
 
 --- attach view for buffer
 ---@param bufnr integer
----@param item { column_max_widths:number[],fields:CsvFieldMetrics[][] }
-function M.attach(bufnr, item)
+---@param fields CsvFieldMetrics[][] }
+---@param column_max_widths number[]
+function M.attach(bufnr, fields, column_max_widths)
   if views[bufnr] then
     print("csvview is already attached for this buffer.")
     return
   end
-  views[bufnr] = CsvView:new(bufnr, item.fields, item.column_max_widths)
+  views[bufnr] = CsvView:new(bufnr, fields, column_max_widths)
 end
 
 --- detach view for buffer
@@ -195,13 +196,14 @@ end
 
 --- start render
 ---@param bufnr integer
----@param item { column_max_widths:number[],fields:CsvFieldMetrics[][] }
-function M.update(bufnr, item)
+---@param fields CsvFieldMetrics[][] }
+---@param column_max_widths number[]
+function M.update(bufnr, fields, column_max_widths)
   if not views[bufnr] then
     print("csvview is not attached for this buffer.")
     return
   end
-  views[bufnr]:update(item.fields, item.column_max_widths)
+  views[bufnr]:update(fields, column_max_widths)
 end
 
 --- setup view
