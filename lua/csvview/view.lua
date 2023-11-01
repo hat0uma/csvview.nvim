@@ -13,8 +13,7 @@ local config = {
 --- @field bufnr integer
 --- @field fields CsvFieldMetrics[][]
 --- @field column_max_widths integer[]
---- @field top_lnum integer 1-indexed last rendered range
---- @field bot_lnum integer 1-indexed last rendered range
+--- @field extmarks integer[]
 local CsvView = {}
 
 --- create new view
@@ -29,8 +28,7 @@ function CsvView:new(bufnr, fields, column_max_widths)
   obj.bufnr = bufnr
   obj.fields = fields
   obj.column_max_widths = column_max_widths
-  obj.top_lnum = -1
-  obj.bot_lnum = -1
+  obj.extmarks = {}
   return setmetatable(obj, self)
 end
 
@@ -42,11 +40,12 @@ end
 ---@param border boolean
 function CsvView:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
-    vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset + field.len, {
-      virt_text = { { string.rep(" ", padding) } },
-      virt_text_pos = "inline",
-      right_gravity = true,
-    })
+    self.extmarks[#self.extmarks + 1] =
+      vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset + field.len, {
+        virt_text = { { string.rep(" ", padding) } },
+        virt_text_pos = "inline",
+        right_gravity = true,
+      })
   end
 
   if border then
@@ -63,7 +62,7 @@ end
 ---@param border boolean
 function CsvView:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
-    vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+    self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
       virt_text = { { string.rep(" ", padding) } },
       virt_text_pos = "inline",
       right_gravity = false,
@@ -88,7 +87,7 @@ function CsvView:render_column_index_header(lnum)
       virt[#virt + 1] = { "," }
     end
   end
-  vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
     virt_lines = { virt },
     virt_lines_above = true,
   })
@@ -98,7 +97,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 function CsvView:_highlight_delimiter(lnum, offset)
-  vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     hl_group = config.border.hl,
     end_col = offset + 1,
   })
@@ -109,7 +108,7 @@ end
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
 function CsvView:_render_border(lnum, offset, padding)
-  vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     virt_text = { { string.rep(" ", padding) .. config.border.char, config.border.hl } },
     virt_text_pos = "overlay",
   })
@@ -123,15 +122,11 @@ function CsvView:_colwidth(column_index)
 end
 
 --- clear view
---- Clear all if linestart or lineend is -1
----@param linestart integer 1-indexed
----@param lineend integer 1-indexed
-function CsvView:clear(linestart, lineend)
-  if linestart == -1 or lineend == -1 then
-    vim.api.nvim_buf_clear_namespace(self.bufnr, EXTMARK_NS, 0, -1)
-  else
-    vim.api.nvim_buf_clear_namespace(self.bufnr, EXTMARK_NS, linestart - 1, lineend)
+function CsvView:clear()
+  for _, id in pairs(self.extmarks) do
+    vim.api.nvim_buf_del_extmark(self.bufnr, EXTMARK_NS, id)
   end
+  self.extmarks = {}
 end
 
 --- render
@@ -139,9 +134,7 @@ end
 ---@param bot_lnum integer 1-indexed
 function CsvView:render(top_lnum, bot_lnum)
   -- clear last rendered.
-  self:clear(self.top_lnum, self.bot_lnum)
-  self.top_lnum = top_lnum
-  self.bot_lnum = bot_lnum
+  self:clear()
 
   -- self:render_column_index_header(top_lnum)
   --- render all fields in ranges
@@ -190,7 +183,7 @@ function M.detach(bufnr)
     print("csvview is not attached for this buffer.")
     return
   end
-  views[bufnr]:clear(0, -1)
+  views[bufnr]:clear()
   views[bufnr] = nil
 end
 
