@@ -22,7 +22,7 @@ describe("parser", function()
     end)
   end)
 
-  describe("iter_lines", function()
+  describe("iter_lines_async", function()
     it("should parse all lines when no range is specified", function()
       local lines = {
         "a,b,c,d,e,,",
@@ -40,10 +40,11 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      for _, line in p.iter_lines(buf) do
+      p.iter_lines_async(buf, nil, nil, function(_, line)
         table.insert(actual, line)
-      end
-      assert.are.same(expected, actual)
+      end, function()
+        assert.are.same(expected, actual)
+      end)
     end)
     it("should parse only the specified range", function()
       local lines = {
@@ -62,10 +63,11 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      for _, line in p.iter_lines(buf, startlnum, endlnum) do
+      p.iter_lines_async(buf, startlnum, endlnum, function(_, line)
         table.insert(actual, line)
-      end
-      assert.are.same(expected, actual)
+      end, function()
+        assert.are.same(expected, actual)
+      end)
     end)
   end)
 end)
