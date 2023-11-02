@@ -16,7 +16,6 @@ local function register_events(bufnr, events)
       events.on_reload()
     end,
     buffer = bufnr,
-    group = vim.api.nvim_create_augroup("CsvView", {}),
   })
 
   vim.api.nvim_buf_attach(bufnr, false, {
@@ -57,12 +56,32 @@ function M.enable()
     view.attach(bufnr, fields, column_max_widths)
   end)
   register_events(bufnr, {
-    on_lines = function(_, _, _, first, last)
+    ---@param first integer
+    ---@param last integer
+    ---@param last_updated integer
+    on_lines = function(_, _, _, first, last, last_updated)
+      if last > last_updated then
+        -- when line deleted.
+        for _ = last_updated + 1, last do
+          table.remove(fields, last_updated + 1)
+        end
+      elseif last < last_updated then
+        -- when line added.
+        for i = last + 1, last_updated do
+          table.insert(fields, i, {})
+        end
+      else
+        -- when updated within a line.
+      end
+
+      local startlnum = first + 1
+      local endlnum = last_updated
       metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
         fields = f
         view.update(bufnr, fields, column_max_widths)
-      end, first + 1, last + 1, fields)
+      end, startlnum, endlnum, fields)
     end,
+
     on_reload = function()
       metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
         fields = f

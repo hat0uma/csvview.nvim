@@ -139,6 +139,9 @@ function CsvView:render(top_lnum, bot_lnum)
   -- self:render_column_index_header(top_lnum)
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
+    if self.fields[lnum] == nil then
+      goto continue
+    end
     local offset = 0
     for column_index, field in ipairs(self.fields[lnum]) do
       local padding = self:_colwidth(column_index) - field.display_width + config.pack
@@ -150,6 +153,7 @@ function CsvView:render(top_lnum, bot_lnum)
       end
       offset = offset + field.len + 1
     end
+    ::continue::
   end
 end
 

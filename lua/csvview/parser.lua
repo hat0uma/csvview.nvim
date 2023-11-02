@@ -70,18 +70,17 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, on_line, on_end)
   -- Run in small chunks to avoid blocking the main thread
   local iter ---@type function
   iter = function()
-    if startlnum >= endlnum then
-      on_end()
-      return
-    end
-
-    local batch = math.min(endlnum - startlnum, config.async_chunksize)
-    for i = startlnum, startlnum + batch do
+    local chunkend = math.min(endlnum, startlnum + config.async_chunksize)
+    for i = startlnum, chunkend do
       on_line(i, M.get_fields(bufnr, i))
     end
-    startlnum = startlnum + batch
-    -- vim.schedule(iter)
-    vim.defer_fn(iter, 1)
+
+    if chunkend < endlnum then
+      startlnum = chunkend
+      vim.defer_fn(iter, 1)
+    else
+      on_end()
+    end
   end
 
   iter()
