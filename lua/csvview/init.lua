@@ -1,4 +1,5 @@
 local M = {}
+local config = require("csvview.config")
 local metrics = require("csvview.metrics")
 local view = require("csvview.view")
 
@@ -42,7 +43,8 @@ local function unregister_events(bufnr)
 end
 
 --- enable csv table view
-function M.enable()
+---@param opts CsvViewOptions?
+function M.enable(opts)
   local bufnr = vim.api.nvim_get_current_buf()
   if vim.tbl_contains(enable_buffers, bufnr) then
     print("csvview is already enabled.")
@@ -51,14 +53,13 @@ function M.enable()
   table.insert(enable_buffers, bufnr)
 
   local fields = {}
-  metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+  opts = opts or config.get()
+  metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
     fields = f
-    view.attach(bufnr, fields, column_max_widths)
+    view.attach(bufnr, fields, column_max_widths, opts)
   end)
   register_events(bufnr, {
-    ---@param first integer
-    ---@param last integer
-    ---@param last_updated integer
+    ---@type fun(_,_,_,first:integer,last:integer,last_updated:integer)
     on_lines = function(_, _, _, first, last, last_updated)
       if last > last_updated then
         -- when line deleted.
@@ -76,14 +77,14 @@ function M.enable()
 
       local startlnum = first + 1
       local endlnum = last_updated
-      metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+      metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
         fields = f
         view.update(bufnr, fields, column_max_widths)
       end, startlnum, endlnum, fields)
     end,
 
     on_reload = function()
-      metrics.compute_csv_metrics(bufnr, function(f, column_max_widths)
+      metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
         fields = f
         view.update(bufnr, fields, column_max_widths)
       end)
@@ -110,10 +111,16 @@ function M.disable()
 end
 
 --- setup
-function M.setup()
-  vim.api.nvim_create_user_command("CsvViewEnable", M.enable, {})
-  vim.api.nvim_create_user_command("CsvViewDisable", M.disable, {})
+---@param opts CsvViewOptions?
+function M.setup(opts)
+  config.setup(opts)
   view.setup()
+  vim.api.nvim_create_user_command("CsvViewEnable", function()
+    M.enable()
+  end, {})
+  vim.api.nvim_create_user_command("CsvViewDisable", function()
+    M.disable()
+  end, {})
 end
 
 return M

@@ -2,10 +2,6 @@ local M = {}
 
 local DELIM = string.byte(",")
 
-local config = {
-  async_chunksize = 50,
-}
-
 --- parse line
 ---@param line string
 ---@return string[]
@@ -39,47 +35,30 @@ function M.get_fields(bufnr, lnum)
   return M._parse_line(line[1])
 end
 
---- iterate fields
----@param bufnr integer
----@param startlnum integer?
----@param endlnum integer?
----@return fun():integer?,string[]?
-function M.iter_lines(bufnr, startlnum, endlnum)
-  local lnum = endlnum and endlnum or vim.api.nvim_buf_line_count(bufnr)
-  local i = startlnum and startlnum - 1 or 0
-  return function()
-    if i >= lnum then
-      return nil, nil
-    end
-
-    i = i + 1
-    return i, M.get_fields(bufnr, i)
-  end
-end
-
 --- iterate fields async
 ---@param bufnr integer
 ---@param startlnum integer?
 ---@param endlnum integer?
----@param on_line fun( lnum:integer,columns:string[] )
----@param on_end fun()
-function M.iter_lines_async(bufnr, startlnum, endlnum, on_line, on_end)
+---@param cb { on_line:fun( lnum:integer,columns:string[] ), on_end:fun() }
+---@param opts CsvViewOptions
+function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
 
   -- Run in small chunks to avoid blocking the main thread
   local iter ---@type function
   iter = function()
-    local chunkend = math.min(endlnum, startlnum + config.async_chunksize)
+    local chunkend = math.min(endlnum, startlnum + opts.parser.async_chunksize)
     for i = startlnum, chunkend do
-      on_line(i, M.get_fields(bufnr, i))
+      cb.on_line(i, M.get_fields(bufnr, i))
     end
 
+    -- next or end
     if chunkend < endlnum then
       startlnum = chunkend
       vim.defer_fn(iter, 1)
     else
-      on_end()
+      cb.on_end()
     end
   end
 

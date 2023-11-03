@@ -1,3 +1,4 @@
+local config = require("csvview.config")
 local p = require("csvview.parser")
 
 describe("parser", function()
@@ -40,11 +41,14 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      p.iter_lines_async(buf, nil, nil, function(_, line)
-        table.insert(actual, line)
-      end, function()
-        assert.are.same(expected, actual)
-      end)
+      p.iter_lines_async(buf, nil, nil, {
+        on_line = function(_, line)
+          table.insert(actual, line)
+        end,
+        on_end = function()
+          assert.are.same(expected, actual)
+        end,
+      }, config.defaults)
     end)
     it("should parse only the specified range", function()
       local lines = {
@@ -63,11 +67,14 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      p.iter_lines_async(buf, startlnum, endlnum, function(_, line)
-        table.insert(actual, line)
-      end, function()
-        assert.are.same(expected, actual)
-      end)
+      p.iter_lines_async(buf, startlnum, endlnum, {
+        on_line = function(_, line)
+          table.insert(actual, line)
+        end,
+        on_end = function()
+          assert.are.same(expected, actual)
+        end,
+      }, config.defaults)
     end)
   end)
 end)

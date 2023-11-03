@@ -24,25 +24,29 @@ end
 
 --- compute csv metrics
 ---@param bufnr integer
+---@param opts CsvViewOptions
 ---@param on_end fun(fields:CsvFieldMetrics,column_max_widths:number[])
----@param startlnum integer?
----@param endlnum integer?
----@param fields CsvFieldMetrics[][]?
-function M.compute_csv_metrics(bufnr, on_end, startlnum, endlnum, fields)
+---@param startlnum integer? if present, compute only specified range
+---@param endlnum integer? if present, compute only specified range
+---@param fields CsvFieldMetrics[][]? if specify `startlnum` and `endlnum`, this value will be inherited for rows that are not calculated.
+function M.compute_csv_metrics(bufnr, opts, on_end, startlnum, endlnum, fields)
   fields = fields or {}
-  parser.iter_lines_async(bufnr, startlnum, endlnum, function(lnum, columns)
-    fields[lnum] = {}
-    for i, column in ipairs(columns) do
-      local width = vim.fn.strdisplaywidth(column)
-      fields[lnum][i] = {
-        len = #column,
-        display_width = width,
-        is_number = tonumber(column) ~= nil,
-      }
-    end
-  end, function()
-    on_end(fields, M._max_column_width(fields))
-  end)
+  parser.iter_lines_async(bufnr, startlnum, endlnum, {
+    on_line = function(lnum, columns)
+      fields[lnum] = {}
+      for i, column in ipairs(columns) do
+        local width = vim.fn.strdisplaywidth(column)
+        fields[lnum][i] = {
+          len = #column,
+          display_width = width,
+          is_number = tonumber(column) ~= nil,
+        }
+      end
+    end,
+    on_end = function()
+      on_end(fields, M._max_column_width(fields))
+    end,
+  }, opts)
 end
 
 return M
