@@ -178,6 +178,7 @@ function M.attach(bufnr, fields, column_max_widths)
     return
   end
   views[bufnr] = CsvView:new(bufnr, fields, column_max_widths)
+  vim.cmd([[redraw!]])
 end
 
 --- detach view for buffer
@@ -201,6 +202,7 @@ function M.update(bufnr, fields, column_max_widths)
     return
   end
   views[bufnr]:update(fields, column_max_widths)
+  vim.cmd([[redraw!]])
 end
 
 --- setup view
