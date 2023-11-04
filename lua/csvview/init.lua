@@ -17,6 +17,7 @@ local function register_events(bufnr, events)
       events.on_reload()
     end,
     buffer = bufnr,
+    once = true,
   })
 
   vim.api.nvim_buf_attach(bufnr, false, {
@@ -85,9 +86,10 @@ function M.enable(bufnr, opts)
     end,
 
     on_reload = function()
+      view.detach(bufnr)
       metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
         fields = f
-        view.update(bufnr, fields, column_max_widths)
+        view.attach(bufnr, fields, column_max_widths, opts)
       end)
     end,
   })
