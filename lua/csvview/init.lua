@@ -43,9 +43,10 @@ local function unregister_events(bufnr)
 end
 
 --- enable csv table view
+---@param bufnr integer?
 ---@param opts CsvViewOptions?
-function M.enable(opts)
-  local bufnr = vim.api.nvim_get_current_buf()
+function M.enable(bufnr, opts)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
   if vim.tbl_contains(enable_buffers, bufnr) then
     print("csvview is already enabled.")
     return
@@ -53,7 +54,7 @@ function M.enable(opts)
   table.insert(enable_buffers, bufnr)
 
   local fields = {}
-  opts = opts or config.get()
+  opts = config.get(opts)
   metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
     fields = f
     view.attach(bufnr, fields, column_max_widths, opts)

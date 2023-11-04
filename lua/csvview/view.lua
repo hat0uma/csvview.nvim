@@ -161,7 +161,7 @@ function CsvView:update(fields, column_max_widths)
 end
 
 --- @type CsvView[]
-local views = {}
+M._views = {}
 
 --- attach view for buffer
 ---@param bufnr integer
@@ -169,23 +169,23 @@ local views = {}
 ---@param column_max_widths number[]
 ---@param opts CsvViewOptions
 function M.attach(bufnr, fields, column_max_widths, opts)
-  if views[bufnr] then
+  if M._views[bufnr] then
     print("csvview is already attached for this buffer.")
     return
   end
-  views[bufnr] = CsvView:new(bufnr, fields, column_max_widths, opts)
+  M._views[bufnr] = CsvView:new(bufnr, fields, column_max_widths, opts)
   vim.cmd([[redraw!]])
 end
 
 --- detach view for buffer
 ---@param bufnr integer
 function M.detach(bufnr)
-  if not views[bufnr] then
+  if not M._views[bufnr] then
     print("csvview is not attached for this buffer.")
     return
   end
-  views[bufnr]:clear()
-  views[bufnr] = nil
+  M._views[bufnr]:clear()
+  M._views[bufnr] = nil
 end
 
 --- start render
@@ -193,11 +193,11 @@ end
 ---@param fields CsvFieldMetrics[][] }
 ---@param column_max_widths number[]
 function M.update(bufnr, fields, column_max_widths)
-  if not views[bufnr] then
+  if not M._views[bufnr] then
     print("csvview is not attached for this buffer.")
     return
   end
-  views[bufnr]:update(fields, column_max_widths)
+  M._views[bufnr]:update(fields, column_max_widths)
   vim.cmd([[redraw!]])
 end
 
@@ -209,7 +209,7 @@ function M.setup()
   -- set decorator
   vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
     on_win = function(_, winid, bufnr, _, _)
-      if not views[bufnr] then
+      if not M._views[bufnr] then
         return false
       end
 
@@ -221,10 +221,11 @@ function M.setup()
 
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      views[bufnr]:render(top, bot)
+      M._views[bufnr]:render(top, bot)
       return false
     end,
   })
 end
 
+M.CsvView = CsvView
 return M

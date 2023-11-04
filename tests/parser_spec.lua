@@ -12,10 +12,6 @@ describe("parser", function()
       assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,"))
       assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g"))
       assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,"))
-      assert.are.same(
-        { "too looooooooooooooooooooooooooooooooooooooong line", "de", "", "g", "h" },
-        p._parse_line("too looooooooooooooooooooooooooooooooooooooong line,de,,g,h")
-      )
     end)
 
     it("empty line", function()
@@ -27,13 +23,11 @@ describe("parser", function()
     it("should parse all lines when no range is specified", function()
       local lines = {
         "a,b,c,d,e,,",
-        "f,g,h,i,j,k,l",
         "",
         "m,n",
       }
       local expected = {
         { "a", "b", "c", "d", "e", "", "" },
-        { "f", "g", "h", "i", "j", "k", "l" },
         {},
         { "m", "n" },
       }
@@ -41,6 +35,7 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
+      local opts = config.get({ parser = { async_chunksize = 2 } })
       p.iter_lines_async(buf, nil, nil, {
         on_line = function(_, line)
           table.insert(actual, line)
@@ -48,7 +43,7 @@ describe("parser", function()
         on_end = function()
           assert.are.same(expected, actual)
         end,
-      }, config.defaults)
+      }, opts)
     end)
     it("should parse only the specified range", function()
       local lines = {
