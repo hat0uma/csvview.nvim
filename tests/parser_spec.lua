@@ -21,6 +21,7 @@ describe("parser", function()
 
   describe("iter_lines_async", function()
     it("should parse all lines when no range is specified", function()
+      local co = coroutine.running()
       local lines = {
         "a,b,c,d,e,,",
         "",
@@ -35,17 +36,21 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      local opts = config.get({ parser = { async_chunksize = 2 } })
+      local opts = config.get({ parser = { async_chunksize = 1 } })
       p.iter_lines_async(buf, nil, nil, {
         on_line = function(_, line)
           table.insert(actual, line)
         end,
-        on_end = function()
+        on_end = vim.schedule_wrap(function()
           assert.are.same(expected, actual)
-        end,
+          coroutine.resume(co)
+        end),
       }, opts)
+
+      coroutine.yield()
     end)
     it("should parse only the specified range", function()
+      local co = coroutine.running()
       local lines = {
         "a,b,c,d,e,,",
         "f,g,h,i,j,k,l",
@@ -66,10 +71,13 @@ describe("parser", function()
         on_line = function(_, line)
           table.insert(actual, line)
         end,
-        on_end = function()
+        on_end = vim.schedule_wrap(function()
           assert.are.same(expected, actual)
-        end,
+          coroutine.resume(co)
+        end),
       }, config.defaults)
+
+      coroutine.yield()
     end)
   end)
 end)

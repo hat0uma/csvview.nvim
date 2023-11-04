@@ -55,7 +55,7 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
 
     -- next or end
     if chunkend < endlnum then
-      startlnum = chunkend
+      startlnum = chunkend + 1
       vim.defer_fn(iter, 1)
     else
       cb.on_end()
