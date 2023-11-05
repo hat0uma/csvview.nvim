@@ -109,13 +109,6 @@ function CsvView:_render_border(lnum, offset, padding)
   })
 end
 
---- get column width
----@param column_index integer 1-indexed
----@return integer
-function CsvView:_colwidth(column_index)
-  return math.max(self.column_max_widths[column_index], self.opts.view.min_column_width)
-end
-
 --- clear view
 function CsvView:clear()
   for _, id in pairs(self.extmarks) do
@@ -124,28 +117,43 @@ function CsvView:clear()
   self.extmarks = {}
 end
 
+--- render column
+---@param lnum integer 1-indexed lnum
+---@param column_index 1-indexed column index
+---@param field CsvFieldMetrics
+---@param offset integer 0-indexed byte offset
+function CsvView:render_column(lnum, column_index, field, offset)
+  if not self.column_max_widths[column_index] then
+    -- column_max_widths is not computed yet.
+    return
+  end
+  -- if column is last, do not render border.
+  local render_border = column_index < #self.fields[lnum]
+  local colwidth = math.max(self.column_max_widths[column_index], self.opts.view.min_column_width)
+  local padding = colwidth - field.display_width + self.opts.view.spacing
+  if field.is_number then
+    self:_align_right(lnum, offset, padding, field, render_border)
+  else
+    self:_align_left(lnum, offset, padding, field, render_border)
+  end
+end
+
 --- render
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
 function CsvView:render(top_lnum, bot_lnum)
-  -- clear last rendered.
-  self:clear()
-
   -- self:render_column_index_header(top_lnum)
+
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
-    if self.fields[lnum] == nil then
+    local line = self.fields[lnum]
+    if not line then
       goto continue
     end
+
     local offset = 0
-    for column_index, field in ipairs(self.fields[lnum]) do
-      local padding = self:_colwidth(column_index) - field.display_width + self.opts.view.spacing
-      local render_border = column_index < #self.fields[lnum]
-      if field.is_number then
-        self:_align_right(lnum, offset, padding, field, render_border)
-      else
-        self:_align_left(lnum, offset, padding, field, render_border)
-      end
+    for column_index, field in ipairs(line) do
+      self:render_column(lnum, column_index, field, offset)
       offset = offset + field.len + 1
     end
     ::continue::
@@ -209,7 +217,8 @@ function M.setup()
   -- set decorator
   vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
     on_win = function(_, winid, bufnr, _, _)
-      if not M._views[bufnr] then
+      local view = M._views[bufnr]
+      if not view then
         return false
       end
 
@@ -219,9 +228,20 @@ function M.setup()
       --   return false
       -- end
 
+      -- clear last rendered.
+      view:clear()
+
+      -- render with current window range.
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      M._views[bufnr]:render(top, bot)
+      local ok, result = pcall(view.render, view, top, bot)
+      if not ok then
+        vim.notify(string.format("csvview: error while rendering: %s", result), vim.log.levels.ERROR)
+        view:clear()
+        view.column_max_widths = {}
+        view.fields = {}
+      end
+
       return false
     end,
   })
