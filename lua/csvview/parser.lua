@@ -1,6 +1,23 @@
 local M = {}
 
 local DELIM = string.byte(",")
+local DQUOTE = string.byte('"')
+local SQUOTE = string.byte("'")
+
+--- Find the next character in a string.
+---@param s string
+---@param start_pos integer start position
+---@param char integer byte value of character to find
+---@return integer?
+local function find_char(s, start_pos, char)
+  local len = #s
+  for i = start_pos, len do
+    if string.byte(s, i) == char then
+      return i
+    end
+  end
+  return nil
+end
 
 --- parse line
 ---@param line string
@@ -14,14 +31,27 @@ function M._parse_line(line)
   local fields = {} --- @type string[]
   local field_start_pos = 1
   local pos = 1
+
   while pos <= len do
     local char = string.byte(line, pos)
     if char == DELIM then
+      -- add field (even if empty).
       fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
       field_start_pos = pos + 1
+    elseif char == DQUOTE or char == SQUOTE then
+      -- find closing quote and skip it.
+      -- if there is no closing quote, skip the rest of the line.
+      local close_pos = find_char(line, pos + 1, char)
+      if close_pos then
+        pos = close_pos
+      else
+        pos = len
+      end
     end
     pos = pos + 1
   end
+
+  -- add last field (even if empty).
   fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
   return fields
 end
