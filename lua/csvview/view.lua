@@ -43,8 +43,14 @@ function CsvView:_align_left(lnum, offset, padding, field, border)
       })
   end
 
-  if border then
-    -- self:_render_border(lnum, offset + field.len, padding)
+  if not border then
+    return
+  end
+
+  -- render border or highlight delimiter
+  if self.opts.view.display_mode == "border" then
+    self:_render_border(lnum, offset + field.len)
+  else
     self:_highlight_delimiter(lnum, offset + field.len)
   end
 end
@@ -64,8 +70,14 @@ function CsvView:_align_right(lnum, offset, padding, field, border)
     })
   end
 
-  if border then
-    -- self:_render_border(lnum, offset + field.len, 0)
+  if not border then
+    return
+  end
+
+  -- render border or highlight delimiter
+  if self.opts.view.display_mode == "border" then
+    self:_render_border(lnum, offset + field.len)
+  else
     self:_highlight_delimiter(lnum, offset + field.len)
   end
 end
@@ -101,10 +113,9 @@ end
 --- render table border
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
----@param padding integer
-function CsvView:_render_border(lnum, offset, padding)
+function CsvView:_render_border(lnum, offset)
   self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
-    virt_text = { { string.rep(" ", padding) .. "│", "CsvViewDelimiter" } },
+    virt_text = { { "│", "CsvViewDelimiter" } },
     virt_text_pos = "overlay",
   })
 end
