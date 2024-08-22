@@ -49,7 +49,7 @@ end
 function M.enable(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if vim.tbl_contains(enable_buffers, bufnr) then
-    print("csvview is already enabled.")
+    vim.notify("csvview: already enabled for this buffer.")
     return
   end
   table.insert(enable_buffers, bufnr)
@@ -99,7 +99,7 @@ end
 function M.disable()
   local bufnr = vim.api.nvim_get_current_buf()
   if not vim.tbl_contains(enable_buffers, bufnr) then
-    print("csvview is not enabled for this buffer.")
+    vim.notify("csvview: not enabled for this buffer.")
     return
   end
 

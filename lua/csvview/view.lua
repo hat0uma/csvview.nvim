@@ -178,7 +178,7 @@ M._views = {}
 ---@param opts CsvViewOptions
 function M.attach(bufnr, fields, column_max_widths, opts)
   if M._views[bufnr] then
-    print("csvview is already attached for this buffer.")
+    vim.notify("csvview: already attached for this buffer.")
     return
   end
   M._views[bufnr] = CsvView:new(bufnr, fields, column_max_widths, opts)
@@ -189,7 +189,7 @@ end
 ---@param bufnr integer
 function M.detach(bufnr)
   if not M._views[bufnr] then
-    print("csvview is not attached for this buffer.")
+    vim.notify("csvview: not attached for this buffer.")
     return
   end
   M._views[bufnr]:clear()
@@ -202,7 +202,7 @@ end
 ---@param column_max_widths number[]
 function M.update(bufnr, fields, column_max_widths)
   if not M._views[bufnr] then
-    print("csvview is not attached for this buffer.")
+    vim.notify("csvview: not attached for this buffer.")
     return
   end
   M._views[bufnr]:update(fields, column_max_widths)
