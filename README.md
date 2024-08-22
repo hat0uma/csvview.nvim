@@ -10,8 +10,23 @@ With this plugin, you can easily view and edit CSV files within Neovim.
 - Displays the CSV file in a tabular format using virtual text.
 - Dynamically updates the CSV view as you edit, ensuring a seamless editing experience.
 - Asynchronous parsing enables comfortable handling of large CSV files.
+- Supports two display modes:
+  - `highlight`: Highlights the delimiter.
+  - `border`: Displays the delimiter with `│`.
 
-**Note:** The plugin is currently a work in progress (WIP) and only implements basic functionality.
+<table>
+  <tr>
+    <th>display_mode = "highlight"</th>
+    <th>display_mode = "border"</th>
+  </tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/cb26e430-c3cb-407f-bb80-42c11ba7fa19" />
+    </td>
+    <td>
+      <img src="https://github.com/user-attachments/assets/17e5fc01-9a58-4801-b2a6-3d23ca48e26f" />
+    </td>
+  </tr>
+</table>
 
 ## Requirements
 
@@ -62,8 +77,16 @@ The configuration options are as follows:
   view = {
     --- minimum width of a column
     min_column_width = 5,
+
     --- spacing between columns
     spacing = 2,
+
+    --- The display method of the delimiter
+    --- "highlight" highlights the delimiter
+    --- "border" displays the delimiter with `│`
+    --- see `Features` section of the README.
+    ---@type "highlight" | "border"
+    display_mode = "highlight",
   },
 }
 ```
