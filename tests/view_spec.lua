@@ -24,8 +24,16 @@ local function get_lines_with_extmarks(bufnr, ns)
         lines[lnum] = prefix .. virt_text[1] .. suffix
         col_offset[lnum] = col_offset[lnum] + #virt_text[1]
       end
+    elseif details.virt_text_pos == "overlay" then
+      local virt_text = details.virt_text[1][1]
+      col_offset[lnum] = col_offset[lnum] or 0
+      local prefix = lines[lnum]:sub(1, col + col_offset[lnum])
+      local suffix = lines[lnum]:sub(col + col_offset[lnum] + 1 + vim.fn.strdisplaywidth(virt_text))
+      lines[lnum] = prefix .. virt_text .. suffix
+      col_offset[lnum] = col_offset[lnum] + #virt_text - vim.fn.strdisplaywidth(virt_text)
     end
   end
+
   return lines
 end
 
@@ -33,41 +41,88 @@ describe("view", function()
   csvview.setup()
   local ns = vim.api.nvim_get_namespaces()["csv_extmark"]
   describe("CsvView:render", function()
-    it("should align correctly even if it contains multibyte characters", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      local opts = config.get({
-        view = { min_column_width = 5, spacing = 1 },
-      })
-      local lines = {
-        "column1(number),column2(emoji),column3(string)",
-        "111,😀,abcde",
-        "222222222222,😒😒😒😒,fgh",
-        "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
-      }
-      local expected = {
-        "column1(number)    ,column2(emoji)     ,column3(string) ",
-        "                111,😀                 ,abcde           ",
-        "       222222222222,😒😒😒😒           ,fgh             ",
-        " 333333333333333333,😎b😎b😎b😎b😎b😎b ,ijk             ",
-      }
+    describe("should align correctly even if it contains multibyte characters", function()
+      it("display_mode = 'highlight'", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local opts = config.get({
+          view = {
+            min_column_width = 5,
+            spacing = 1,
+            display_mode = "highlight",
+          },
+        })
+        local lines = {
+          "column1(number),column2(emoji),column3(string)",
+          "111,😀,abcde",
+          "222222222222,😒😒😒😒,fgh",
+          "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
+        }
+        local expected = {
+          "column1(number)    ,column2(emoji)     ,column3(string) ",
+          "                111,😀                 ,abcde           ",
+          "       222222222222,😒😒😒😒           ,fgh             ",
+          " 333333333333333333,😎b😎b😎b😎b😎b😎b ,ijk             ",
+        }
 
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-      local co = coroutine.running()
-      metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
-        local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        local co = coroutine.running()
+        metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
+          local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
 
-        -- test
-        v:render(1, vim.api.nvim_buf_line_count(bufnr))
-        local actual = get_lines_with_extmarks(bufnr, ns)
-        for i, line in ipairs(actual) do
-          assert.are.same(expected[i], line)
-        end
-        vim.schedule(function()
-          coroutine.resume(co)
+          -- test
+          v:render(1, vim.api.nvim_buf_line_count(bufnr))
+          local actual = get_lines_with_extmarks(bufnr, ns)
+          for i, line in ipairs(actual) do
+            assert.are.same(expected[i], line)
+          end
+          vim.schedule(function()
+            coroutine.resume(co)
+          end)
         end)
+
+        coroutine.yield()
       end)
 
-      coroutine.yield()
+      it("display_mode = 'border'", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local opts = config.get({
+          view = {
+            min_column_width = 5,
+            spacing = 1,
+            display_mode = "border",
+          },
+        })
+        local lines = {
+          "column1(number),column2(emoji),column3(string)",
+          "111,😀,abcde",
+          "222222222222,😒😒😒😒,fgh",
+          "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
+        }
+        local expected = {
+          "column1(number)    │column2(emoji)     │column3(string) ",
+          "                111│😀                 │abcde           ",
+          "       222222222222│😒😒😒😒           │fgh             ",
+          " 333333333333333333│😎b😎b😎b😎b😎b😎b │ijk             ",
+        }
+
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        local co = coroutine.running()
+        metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
+          local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
+
+          -- test
+          v:render(1, vim.api.nvim_buf_line_count(bufnr))
+          local actual = get_lines_with_extmarks(bufnr, ns)
+          for i, line in ipairs(actual) do
+            assert.are.same(expected[i], line)
+          end
+          vim.schedule(function()
+            coroutine.resume(co)
+          end)
+        end)
+
+        coroutine.yield()
+      end)
     end)
   end)
 end)
