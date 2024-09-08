@@ -1,4 +1,6 @@
 local M = {}
+
+local buffer_event = require("csvview.buffer_event")
 local config = require("csvview.config")
 local metrics = require("csvview.metrics")
 local view = require("csvview.view")
@@ -6,41 +8,11 @@ local view = require("csvview.view")
 --- @type integer[]
 local enable_buffers = {}
 
---- register buffer events
+--- check if csv table view is enabled
 ---@param bufnr integer
----@param events { on_lines:function,on_reload:function}
-local function register_events(bufnr, events)
-  ---  on :e
-  vim.b[bufnr].csvview_update_auid = vim.api.nvim_create_autocmd({ "BufReadPost" }, {
-    callback = function()
-      register_events(bufnr, events)
-      events.on_reload()
-    end,
-    buffer = bufnr,
-    once = true,
-  })
-
-  vim.api.nvim_buf_attach(bufnr, false, {
-    on_lines = function(...)
-      if not vim.tbl_contains(enable_buffers, bufnr) then
-        return true
-      end
-      events.on_lines(...)
-    end,
-    on_reload = function()
-      if not vim.tbl_contains(enable_buffers, bufnr) then
-        return true
-      end
-      events.on_reload()
-    end,
-  })
-end
-
---- unregister buffer events
----@param bufnr integer
-local function unregister_events(bufnr)
-  vim.api.nvim_del_autocmd(vim.b[bufnr].csvview_update_auid)
-  vim.b[bufnr].csvview_update_auid = nil
+---@return boolean
+function M.is_enabled(bufnr)
+  return vim.tbl_contains(enable_buffers, bufnr)
 end
 
 --- enable csv table view
@@ -48,21 +20,30 @@ end
 ---@param opts CsvViewOptions?
 function M.enable(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  if vim.tbl_contains(enable_buffers, bufnr) then
+  opts = config.get(opts)
+
+  if M.is_enabled(bufnr) then
     vim.notify("csvview: already enabled for this buffer.")
     return
   end
   table.insert(enable_buffers, bufnr)
 
+  -- Calculate fields and enable csv table view.
   local fields = {}
-  opts = config.get(opts)
   metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
     fields = f
     view.attach(bufnr, fields, column_max_widths, opts)
   end)
-  register_events(bufnr, {
-    ---@type fun(_,_,_,first:integer,last:integer,last_updated:integer)
+
+  -- Register buffer events.
+  buffer_event.register(bufnr, {
     on_lines = function(_, _, _, first, last, last_updated)
+      -- detach if disabled
+      if not M.is_enabled(bufnr) then
+        return true
+      end
+
+      -- handle line deletion and addition
       if last > last_updated then
         -- when line deleted.
         for _ = last_updated + 1, last do
@@ -77,6 +58,7 @@ function M.enable(bufnr, opts)
         -- when updated within a line.
       end
 
+      -- Recalculate only the difference.
       local startlnum = first + 1
       local endlnum = last_updated
       metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
@@ -86,6 +68,12 @@ function M.enable(bufnr, opts)
     end,
 
     on_reload = function()
+      -- detach if disabled
+      if not M.is_enabled(bufnr) then
+        return true
+      end
+
+      -- Recalculate all fields.
       view.detach(bufnr)
       metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
         fields = f
@@ -96,20 +84,23 @@ function M.enable(bufnr, opts)
 end
 
 --- disable csv table view
-function M.disable()
-  local bufnr = vim.api.nvim_get_current_buf()
-  if not vim.tbl_contains(enable_buffers, bufnr) then
+---@param bufnr integer?
+function M.disable(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not M.is_enabled(bufnr) then
     vim.notify("csvview: not enabled for this buffer.")
     return
   end
 
+  -- Remove buffer from enabled list.
   for i = #enable_buffers, 1, -1 do
     if enable_buffers[i] == bufnr then
       table.remove(enable_buffers, i)
     end
   end
 
-  unregister_events(bufnr)
+  -- Unregister buffer events and detach view.
+  buffer_event.unregister(bufnr)
   view.detach(bufnr)
 end
 
