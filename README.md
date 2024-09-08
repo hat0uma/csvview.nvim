@@ -99,6 +99,14 @@ After opening a CSV file, use the following commands to interact with the plugin
 
 - `:CsvViewEnable`: Enable CSV view.
 - `:CsvViewDisable`: Disable CSV view.
+- `:CsvViewToggle`: Toggle CSV view.
+
+### Lua API
+
+- `require('csvview').enable()`: Enable CSV view.
+- `require('csvview').disable()`: Disable CSV view.
+- `require('csvview').toggle()`: Toggle CSV view.
+- `require('csvview').is_enabled()`: Check if CSV view is enabled.
 
 ## Highlights
 
