@@ -200,7 +200,6 @@ end
 ---@param bufnr integer
 function M.detach(bufnr)
   if not M._views[bufnr] then
-    vim.notify("csvview: not attached for this buffer.")
     return
   end
   M._views[bufnr]:clear()
@@ -213,7 +212,6 @@ end
 ---@param column_max_widths number[]
 function M.update(bufnr, fields, column_max_widths)
   if not M._views[bufnr] then
-    vim.notify("csvview: not attached for this buffer.")
     return
   end
   M._views[bufnr]:update(fields, column_max_widths)
