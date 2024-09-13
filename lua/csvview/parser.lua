@@ -75,6 +75,7 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
   local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
+  local start_time = vim.uv.now()
   if iter_num > 500 then
     vim.notify("csvview: parsing buffer, please wait...")
   end
@@ -90,10 +91,11 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
     -- next or end
     if chunkend < endlnum then
       startlnum = chunkend + 1
-      vim.defer_fn(iter, 1)
+      vim.schedule(iter)
     else
       if iter_num > 500 then
-        vim.notify("csvview: parsing buffer done")
+        local elapsed = vim.uv.now() - start_time
+        vim.notify(string.format("csvview: parsing buffer done in %d[ms]", elapsed))
       end
       cb.on_end()
     end
