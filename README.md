@@ -30,7 +30,7 @@ With this plugin, you can easily view and edit CSV files within Neovim.
 
 ## Requirements
 
-Neovim Nightly
+Neovim v0.10 or newer is required.
 
 ## Installation
 
