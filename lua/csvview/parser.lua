@@ -1,6 +1,5 @@
 local M = {}
 
-local DELIM = string.byte(",")
 local DQUOTE = string.byte('"')
 local SQUOTE = string.byte("'")
 
@@ -19,10 +18,36 @@ local function find_char(s, start_pos, char)
   return nil
 end
 
+--- Get delimiter character
+---@param bufnr integer
+---@param opts CsvViewOptions
+---@return integer
+local function delim_byte(bufnr, opts)
+  local delim = opts.parser.delimiter
+  ---@diagnostic disable-next-line: no-unknown
+  local char
+  if type(delim) == "function" then
+    char = delim(bufnr)
+  end
+
+  if type(delim) == "table" then
+    char = delim.ft[vim.bo.filetype] or delim.default
+  end
+
+  if type(delim) == "string" then
+    char = delim
+  end
+
+  assert(type(char) == "string", string.format("delimiter must be a string, got %s", type(char)))
+  assert(#char == 1, string.format("delimiter must be a single character, got %s", char))
+  return char:byte()
+end
+
 --- parse line
 ---@param line string
+---@param delim integer
 ---@return string[]
-function M._parse_line(line)
+function M._parse_line(line, delim)
   local len = #line
   if len == 0 then
     return {}
@@ -34,7 +59,7 @@ function M._parse_line(line)
 
   while pos <= len do
     local char = string.byte(line, pos)
-    if char == DELIM then
+    if char == delim then
       -- add field (even if empty).
       fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
       field_start_pos = pos + 1
@@ -59,10 +84,11 @@ end
 --- get fields of line
 ---@param bufnr integer
 ---@param lnum integer
+---@param delim integer
 ---@return string[]
-function M.get_fields(bufnr, lnum)
+function M.get_fields(bufnr, lnum, delim)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, true)
-  return M._parse_line(line[1])
+  return M._parse_line(line[1], delim)
 end
 
 --- iterate fields async
@@ -74,6 +100,8 @@ end
 function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
+
+  local delim = delim_byte(bufnr, opts)
   local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
   local start_time = vim.uv.now()
   if iter_num > 500 then
@@ -85,7 +113,7 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   iter = function()
     local chunkend = math.min(endlnum, startlnum + opts.parser.async_chunksize)
     for i = startlnum, chunkend do
-      cb.on_line(i, M.get_fields(bufnr, i))
+      cb.on_line(i, M.get_fields(bufnr, i, delim))
     end
 
     -- next or end
