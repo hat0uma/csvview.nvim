@@ -2,26 +2,35 @@ local config = require("csvview.config")
 local p = require("csvview.parser")
 
 describe("parser", function()
+  local delim = ","
+  local delim_byte = string.byte(delim)
+
   describe("_parse_line", function()
     it("line without empty fields", function()
-      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc,de,f,g,h"))
+      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc,de,f,g,h", delim_byte))
     end)
 
     it("should works for line includes empty fields", function()
-      assert.are.same({ "abc", "de", "", "g", "h" }, p._parse_line("abc,de,,g,h"))
-      assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,"))
-      assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g"))
-      assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,"))
+      assert.are.same({ "abc", "de", "", "g", "h" }, p._parse_line("abc,de,,g,h", delim_byte))
+      assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,", delim_byte))
+      assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g", delim_byte))
+      assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,", delim_byte))
     end)
 
     it("empty line", function()
-      assert.are.same({}, p._parse_line(""))
+      assert.are.same({}, p._parse_line("", delim_byte))
     end)
     it("should works for line includes quoted comma.", function()
-      assert.are.same({ "abc", "de", '"f,g"', "h" }, p._parse_line('abc,de,"f,g",h'))
+      assert.are.same({ "abc", "de", '"f,g"', "h" }, p._parse_line('abc,de,"f,g",h', delim_byte))
     end)
     it("handles fields with missing closing quotes", function()
-      assert.are.same({ "abc", "de", '"f,g,h' }, p._parse_line('abc,de,"f,g,h'))
+      assert.are.same({ "abc", "de", '"f,g,h' }, p._parse_line('abc,de,"f,g,h', delim_byte))
+    end)
+
+    it("parses tab-delimited lines correctly", function()
+      local delim = "\t"
+      local delim_byte = string.byte(delim)
+      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc\tde\tf\tg\th", delim_byte))
     end)
   end)
 
@@ -42,7 +51,7 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      local opts = config.get({ parser = { async_chunksize = 1 } })
+      local opts = config.get({ parser = { async_chunksize = 1, delimiter = delim } })
       p.iter_lines_async(buf, nil, nil, {
         on_line = function(_, line)
           table.insert(actual, line)
