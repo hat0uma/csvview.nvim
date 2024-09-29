@@ -119,9 +119,23 @@ After opening a CSV file, use the following commands to interact with the plugin
 
 ### Commands
 
-- `:CsvViewEnable [delimiter]`: Enable CSV view with the specified delimiter. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
+- `:CsvViewEnable [delimiter]`: Enable CSV view with the specified delimiter.
 - `:CsvViewDisable`: Disable CSV view.
-- `:CsvViewToggle [delimiter]`: Toggle CSV view with the specified delimiter. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
+- `:CsvViewToggle [delimiter]`: Toggle CSV view with the specified delimiter.
+
+### Example
+
+To toggle CSV view, use the following command. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
+
+```vim
+:CsvViewToggle
+```
+
+To toggle CSV view with a custom delimiter, use the following command.
+
+```vim
+:CsvViewEnable \t
+```
 
 ### Lua API
 
