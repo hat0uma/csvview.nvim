@@ -106,12 +106,13 @@ end
 
 --- toggle csv table view
 ---@param bufnr integer?
-function M.toggle(bufnr)
+---@param opts CsvViewOptions?
+function M.toggle(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if M.is_enabled(bufnr) then
     M.disable(bufnr)
   else
-    M.enable(bufnr)
+    M.enable(bufnr, opts)
   end
 end
 
@@ -120,15 +121,6 @@ end
 function M.setup(opts)
   config.setup(opts)
   view.setup()
-  vim.api.nvim_create_user_command("CsvViewEnable", function()
-    M.enable()
-  end, {})
-  vim.api.nvim_create_user_command("CsvViewDisable", function()
-    M.disable()
-  end, {})
-  vim.api.nvim_create_user_command("CsvViewToggle", function()
-    M.toggle()
-  end, {})
 end
 
 return M
