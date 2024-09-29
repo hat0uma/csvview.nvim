@@ -8,6 +8,18 @@ local view = require("csvview.view")
 --- @type integer[]
 local enable_buffers = {}
 
+--- Function to get the starting line of the CSV data
+local function get_csv_start_line(bufnr)
+  local total_lines = vim.api.nvim_buf_line_count(bufnr)
+  for i = 0, total_lines - 1 do
+    local line = vim.api.nvim_buf_get_lines(bufnr, i, i + 1, false)[1]
+    if not line:match("^%s*--") then
+      return i
+    end
+  end
+  return total_lines
+end
+
 --- check if csv table view is enabled
 ---@param bufnr integer
 ---@return boolean
@@ -28,12 +40,15 @@ function M.enable(bufnr, opts)
   end
   table.insert(enable_buffers, bufnr)
 
+  -- Determine the start line (skip comment lines at the top)
+  local start_line = get_csv_start_line(bufnr)
+
   -- Calculate fields and enable csv table view.
   local fields = {}
   metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
     fields = f
     view.attach(bufnr, fields, column_max_widths, opts)
-  end)
+  end, start_line + 1)
 
   -- Register buffer events.
   buffer_event.register(bufnr, {
@@ -42,6 +57,19 @@ function M.enable(bufnr, opts)
       if not M.is_enabled(bufnr) then
         return true
       end
+
+      -- Determine the start line (skip comment lines at the top)
+      local start_line = get_csv_start_line(bufnr)
+
+      -- Ignore updates in the comment lines at the top
+      if last_updated < start_line then
+        return
+      end
+
+      -- Adjust indices to skip comment lines
+      first = math.max(first, start_line)
+      last = math.max(last, start_line)
+      last_updated = math.max(last_updated, start_line)
 
       -- handle line deletion and addition
       if last > last_updated then
@@ -73,12 +101,15 @@ function M.enable(bufnr, opts)
         return true
       end
 
+      -- Determine the start line (skip comment lines at the top)
+      local start_line = get_csv_start_line(bufnr)
+
       -- Recalculate all fields.
       view.detach(bufnr)
       metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
         fields = f
         view.attach(bufnr, fields, column_max_widths, opts)
-      end)
+      end, start_line + 1)
     end,
   })
 end
