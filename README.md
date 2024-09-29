@@ -7,12 +7,13 @@ With this plugin, you can easily view and edit CSV files within Neovim.
 
 ## Features
 
-- Displays the CSV file in a tabular format using virtual text.
+- Displays the CSV/TSV file in a tabular format using virtual text.
 - Dynamically updates the CSV view as you edit, ensuring a seamless editing experience.
 - Asynchronous parsing enables comfortable handling of large CSV files.
 - Supports two display modes:
   - `highlight`: Highlights the delimiter.
   - `border`: Displays the delimiter with `│`.
+- Customizable delimiter character.
 
 <table>
   <tr>
@@ -72,13 +73,34 @@ The configuration options are as follows:
     --- The number of lines that the asynchronous parser processes per cycle.
     --- This setting is used to prevent monopolization of the main thread when displaying large files.
     --- If the UI freezes, try reducing this value.
+    --- @type integer
     async_chunksize = 50,
+
+    --- The delimiter character
+    --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
+    --- e.g:
+    ---  delimiter = ","
+    ---  delimiter = function(bufnr) return "," end
+    ---  delimiter = {
+    ---    default = ",",
+    ---    ft = {
+    ---      tsv = "\t",
+    ---    },
+    ---  }
+    --- @type string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+    delimiter = {
+      default = ",",
+      ft = {
+        tsv = "\t",
+      },
   },
   view = {
     --- minimum width of a column
+    --- @type integer
     min_column_width = 5,
 
     --- spacing between columns
+    --- @type integer
     spacing = 2,
 
     --- The display method of the delimiter
@@ -97,9 +119,9 @@ After opening a CSV file, use the following commands to interact with the plugin
 
 ### Commands
 
-- `:CsvViewEnable`: Enable CSV view.
+- `:CsvViewEnable [delimiter]`: Enable CSV view with the specified delimiter. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
 - `:CsvViewDisable`: Disable CSV view.
-- `:CsvViewToggle`: Toggle CSV view.
+- `:CsvViewToggle [delimiter]`: Toggle CSV view with the specified delimiter. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
 
 ### Lua API
 

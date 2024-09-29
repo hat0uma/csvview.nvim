@@ -31,7 +31,7 @@ local function delim_byte(bufnr, opts)
   end
 
   if type(delim) == "table" then
-    char = delim[vim.bo.filetype] or delim.default
+    char = delim.ft[vim.bo.filetype] or delim.default
   end
 
   if type(delim) == "string" then

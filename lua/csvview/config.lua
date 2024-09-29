@@ -13,12 +13,19 @@ M.defaults = {
     --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
     --- e.g:
     ---  delimiter = ","
-    ---  delimiter = { default = ",", tsv = "\t" }
     ---  delimiter = function(bufnr) return "," end
-    --- @type string | table <string,string> | fun(bufnr:integer): string
+    ---  delimiter = {
+    ---    default = ",",
+    ---    ft = {
+    ---      tsv = "\t",
+    ---    },
+    ---  }
+    --- @type string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
     delimiter = {
       default = ",",
-      tsv = "\t",
+      ft = {
+        tsv = "\t",
+      },
     },
   },
   view = {
