@@ -3,11 +3,12 @@ local csvview = require("csvview")
 local metrics = require("csvview.metrics")
 local view = require("csvview.view")
 
---- get lines with extmarks
+--- Get lines extmarks applied
 ---@param bufnr integer
 ---@param ns integer
 ---@return string[]
 local function get_lines_with_extmarks(bufnr, ns)
+  -- get lines and extmarks
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
   local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })
   local col_offset = {} --- @type integer[]
@@ -42,87 +43,73 @@ describe("view", function()
   local ns = vim.api.nvim_get_namespaces()["csv_extmark"]
   describe("CsvView:render", function()
     describe("should align correctly even if it contains multibyte characters", function()
-      it("display_mode = 'highlight'", function()
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        local opts = config.get({
-          view = {
-            min_column_width = 5,
-            spacing = 1,
-            display_mode = "highlight",
+      -- define test cases
+      --- @type table<string, {opts: CsvViewOptions, lines: string[], expected: string[]}>
+      local cases = {
+        ["display_mode  = 'highlight'"] = {
+          opts = { view = { display_mode = "highlight", spacing = 1, min_column_width = 5 } },
+          lines = {
+            "column1(number),column2(emoji),column3(string)",
+            "111,😀,abcde",
+            "222222222222,😒😒😒😒,fgh",
+            "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
           },
-        })
-        local lines = {
-          "column1(number),column2(emoji),column3(string)",
-          "111,😀,abcde",
-          "222222222222,😒😒😒😒,fgh",
-          "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
-        }
-        local expected = {
-          "column1(number)    ,column2(emoji)     ,column3(string) ",
-          "                111,😀                 ,abcde           ",
-          "       222222222222,😒😒😒😒           ,fgh             ",
-          " 333333333333333333,😎b😎b😎b😎b😎b😎b ,ijk             ",
-        }
+          expected = {
+            "column1(number)    ,column2(emoji)     ,column3(string) ",
+            "                111,😀                 ,abcde           ",
+            "       222222222222,😒😒😒😒           ,fgh             ",
+            " 333333333333333333,😎b😎b😎b😎b😎b😎b ,ijk             ",
+          },
+        },
+        ["display_mode  = 'border'"] = {
+          opts = { view = { display_mode = "border", spacing = 1, min_column_width = 5 } },
+          lines = {
+            "column1(number),column2(emoji),column3(string)",
+            "111,😀,abcde",
+            "222222222222,😒😒😒😒,fgh",
+            "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
+          },
+          expected = {
+            "column1(number)    │column2(emoji)     │column3(string) ",
+            "                111│😀                 │abcde           ",
+            "       222222222222│😒😒😒😒           │fgh             ",
+            " 333333333333333333│😎b😎b😎b😎b😎b😎b │ijk             ",
+          },
+        },
+      }
 
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-        local co = coroutine.running()
-        metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
+      -- run test cases.
+      for name, c in pairs(cases) do
+        it(name, function() ---@async
+          -- create buffer and set lines
+          local bufnr = vim.api.nvim_create_buf(false, true)
+          local opts = config.get(c.opts)
+          local lines = c.lines
+          local expected = c.expected
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+          -- compute metrics
+          local co = coroutine.running()
+          metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
+            vim.schedule(function()
+              coroutine.resume(co, fields, column_max_widths)
+            end)
+          end)
+
+          -- wait for the completion of the metrics computation
+          local fields, column_max_widths = coroutine.yield()
+
+          -- create view and render
           local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
-
-          -- test
           v:render(1, vim.api.nvim_buf_line_count(bufnr))
+
+          -- check the result
           local actual = get_lines_with_extmarks(bufnr, ns)
           for i, line in ipairs(actual) do
             assert.are.same(expected[i], line)
           end
-          vim.schedule(function()
-            coroutine.resume(co)
-          end)
         end)
-
-        coroutine.yield()
-      end)
-
-      it("display_mode = 'border'", function()
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        local opts = config.get({
-          view = {
-            min_column_width = 5,
-            spacing = 1,
-            display_mode = "border",
-          },
-        })
-        local lines = {
-          "column1(number),column2(emoji),column3(string)",
-          "111,😀,abcde",
-          "222222222222,😒😒😒😒,fgh",
-          "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
-        }
-        local expected = {
-          "column1(number)    │column2(emoji)     │column3(string) ",
-          "                111│😀                 │abcde           ",
-          "       222222222222│😒😒😒😒           │fgh             ",
-          " 333333333333333333│😎b😎b😎b😎b😎b😎b │ijk             ",
-        }
-
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-        local co = coroutine.running()
-        metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
-          local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
-
-          -- test
-          v:render(1, vim.api.nvim_buf_line_count(bufnr))
-          local actual = get_lines_with_extmarks(bufnr, ns)
-          for i, line in ipairs(actual) do
-            assert.are.same(expected[i], line)
-          end
-          vim.schedule(function()
-            coroutine.resume(co)
-          end)
-        end)
-
-        coroutine.yield()
-      end)
+      end
     end)
   end)
 end)
