@@ -28,16 +28,18 @@ M.defaults = {
       },
     },
 
-    --- The comment characters
-    --- You can specify a list of comment characters.
+    --- The comment prefix characters
+    --- If the line starts with one of these characters, it is treated as a comment.
+    --- Comment lines are not displayed in tabular format.
+    --- You can also specify it on the command line.
     --- e.g:
-    ---  comment = {
-    ---    "#",
-    ---    "--",
-    ---    "//",
-    ---  }
+    --- :CsvViewEnable comment=#
     --- @type string[]
-    comments = {},
+    comments = {
+      -- "#",
+      -- "--",
+      -- "//",
+    },
   },
   view = {
     --- minimum width of a column
