@@ -1,8 +1,8 @@
 local M = {}
 
+local CsvViewMetrics = require("csvview.metrics")
 local buffer_event = require("csvview.buffer_event")
 local config = require("csvview.config")
-local metrics = require("csvview.metrics")
 local view = require("csvview.view")
 
 --- @type integer[]
@@ -28,11 +28,10 @@ function M.enable(bufnr, opts)
   end
   table.insert(enable_buffers, bufnr)
 
-  -- Calculate fields and enable csv table view.
-  local fields = {}
-  metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
-    fields = f
-    view.attach(bufnr, fields, column_max_widths, opts)
+  -- Calculate metrics and attach view.
+  local metrics = CsvViewMetrics:new(bufnr, opts)
+  metrics:compute_buffer(function()
+    view.attach(bufnr, metrics, opts)
   end)
 
   -- Register buffer events.
@@ -43,28 +42,8 @@ function M.enable(bufnr, opts)
         return true
       end
 
-      -- handle line deletion and addition
-      if last > last_updated then
-        -- when line deleted.
-        for _ = last_updated + 1, last do
-          table.remove(fields, last_updated + 1)
-        end
-      elseif last < last_updated then
-        -- when line added.
-        for i = last + 1, last_updated do
-          table.insert(fields, i, {})
-        end
-      else
-        -- when updated within a line.
-      end
-
       -- Recalculate only the difference.
-      local startlnum = first + 1
-      local endlnum = last_updated
-      metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
-        fields = f
-        view.update(bufnr, fields, column_max_widths)
-      end, startlnum, endlnum, fields)
+      metrics:update(first, last, last_updated)
     end,
 
     on_reload = function()
@@ -75,9 +54,8 @@ function M.enable(bufnr, opts)
 
       -- Recalculate all fields.
       view.detach(bufnr)
-      metrics.compute_csv_metrics(bufnr, opts, function(f, column_max_widths)
-        fields = f
-        view.attach(bufnr, fields, column_max_widths, opts)
+      metrics:compute_buffer(function()
+        view.attach(bufnr, metrics, opts)
       end)
     end,
   })

@@ -1,42 +1,80 @@
 local parser = require("csvview.parser")
-local M = {}
 
---- @class CsvFieldMetrics
+--- @class CsvViewMetrics
+--- @field public rows CsvViewMetrics.Row[]
+--- @field public columns CsvViewMetrics.Column[]
+--- @field private _bufnr integer
+--- @field private _opts CsvViewOptions
+local CsvViewMetrics = {}
+
+--- @class CsvViewMetrics.Row
+--- @field fields CsvFieldMetrics.Field[]
+
+--- @class CsvViewMetrics.Column
+--- @field max_width integer
+
+--- @class CsvFieldMetrics.Field
 --- @field len integer
 --- @field display_width integer
 --- @field is_number boolean
 
---- Get the maximum width of each column
----@param fields CsvFieldMetrics[][]
----@return integer[]
-function M._max_column_width(fields)
-  local column_max_widths = {} --- @type integer[]
-  for i = 1, #fields do
-    for j = 1, #fields[i] do
-      local width = fields[i][j].display_width
-      if not column_max_widths[j] or width > column_max_widths[j] then
-        column_max_widths[j] = width
-      end
-    end
-  end
-  return column_max_widths
+function CsvViewMetrics:new(bufnr, opts)
+  self.__index = self
+
+  local obj = {}
+  obj._bufnr = bufnr
+  obj._opts = opts
+  obj.rows = {}
+  obj.columns = {}
+
+  return setmetatable(obj, self)
 end
 
---- compute csv metrics
----@param bufnr integer
----@param opts CsvViewOptions
----@param on_end fun(fields:CsvFieldMetrics,column_max_widths:number[])
+function CsvViewMetrics:clear()
+  self.rows = {}
+  self.columns = {}
+end
+
+--- Update metrics for specified range
+---@param first integer first line number
+---@param last integer last line number
+---@param last_updated integer current last updated line
+---@param on_end fun()? callback for when the update is complete
+function CsvViewMetrics:update(first, last, last_updated, on_end)
+  if last_updated > last then
+    local delta = last_updated - last
+    for _ = 1, delta do
+      table.insert(self.rows, last + 1, { fields = {} })
+    end
+  elseif last > last_updated then
+    local delta = last - last_updated
+    for _ = 1, delta do
+      table.remove(self.rows, last_updated + 1)
+    end
+  end
+
+  -- update metrics
+  self:_compute(first + 1, last_updated, on_end)
+end
+
+--- Compute metrics for the entire buffer
+---@param on_end fun()? callback for when the update is complete
+function CsvViewMetrics:compute_buffer(on_end)
+  self:_compute(nil, nil, on_end)
+end
+
+--- Compute metrics
 ---@param startlnum integer? if present, compute only specified range
 ---@param endlnum integer? if present, compute only specified range
----@param fields CsvFieldMetrics[][]? if specify `startlnum` and `endlnum`, this value will be inherited for rows that are not calculated.
-function M.compute_csv_metrics(bufnr, opts, on_end, startlnum, endlnum, fields)
-  fields = fields or {}
-  parser.iter_lines_async(bufnr, startlnum, endlnum, {
+---@param on_end fun()? callback for when the update is complete
+function CsvViewMetrics:_compute(startlnum, endlnum, on_end)
+  -- parse buffer and update metrics
+  parser.iter_lines_async(self._bufnr, startlnum, endlnum, {
     on_line = function(lnum, columns)
-      fields[lnum] = {}
+      self.rows[lnum] = { fields = {} }
       for i, column in ipairs(columns) do
         local width = vim.fn.strdisplaywidth(column)
-        fields[lnum][i] = {
+        self.rows[lnum].fields[i] = {
           len = #column,
           display_width = width,
           is_number = tonumber(column) ~= nil,
@@ -44,9 +82,34 @@ function M.compute_csv_metrics(bufnr, opts, on_end, startlnum, endlnum, fields)
       end
     end,
     on_end = function()
-      on_end(fields, M._max_column_width(fields))
+      self:_update_column_metrics()
+      if on_end then
+        on_end()
+      end
     end,
-  }, opts)
+  }, self._opts)
 end
 
-return M
+--- Compute column metrics
+function CsvViewMetrics:_update_column_metrics()
+  --- @type CsvViewMetrics.Column[]
+  local columns = {}
+  for _, row in ipairs(self.rows) do
+    for j, field in ipairs(row.fields) do
+      local width = field.display_width
+
+      -- initialize column metrics
+      if not columns[j] then
+        columns[j] = { max_width = width }
+      end
+
+      -- update column max width
+      if width > columns[j].max_width then
+        columns[j].max_width = width
+      end
+    end
+  end
+  self.columns = columns
+end
+
+return CsvViewMetrics
