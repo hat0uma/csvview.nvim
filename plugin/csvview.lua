@@ -62,9 +62,6 @@ local function opts_for_command(args)
       opts.parser.comments = { opt.value }
     end
   end
-
-  vim.print(opts)
-
   return opts
 end
 
