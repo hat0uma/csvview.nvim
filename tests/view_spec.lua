@@ -1,6 +1,6 @@
+local CsvViewMetrics = require("csvview.metrics")
 local config = require("csvview.config")
 local csvview = require("csvview")
-local metrics = require("csvview.metrics")
 local view = require("csvview.view")
 
 --- Get lines extmarks applied
@@ -39,6 +39,7 @@ local function get_lines_with_extmarks(bufnr, ns)
 end
 
 describe("view", function()
+  config.setup()
   csvview.setup()
   local ns = vim.api.nvim_get_namespaces()["csv_extmark"]
   describe("CsvView:render", function()
@@ -47,14 +48,27 @@ describe("view", function()
       --- @type table<string, {opts: CsvViewOptions, lines: string[], expected: string[]}>
       local cases = {
         ["display_mode  = 'highlight'"] = {
-          opts = { view = { display_mode = "highlight", spacing = 1, min_column_width = 5 } },
+          opts = {
+            view = {
+              display_mode = "highlight",
+              spacing = 1,
+              min_column_width = 5,
+            },
+            parser = {
+              comments = { "#", "--" },
+            },
+          },
           lines = {
+            "# this is comment, so it should be ignored",
+            "-- this is also comment, so it should be ignored",
             "column1(number),column2(emoji),column3(string)",
             "111,😀,abcde",
             "222222222222,😒😒😒😒,fgh",
             "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
           },
           expected = {
+            "# this is comment, so it should be ignored",
+            "-- this is also comment, so it should be ignored",
             "column1(number)    ,column2(emoji)     ,column3(string) ",
             "                111,😀                 ,abcde           ",
             "       222222222222,😒😒😒😒           ,fgh             ",
@@ -62,14 +76,27 @@ describe("view", function()
           },
         },
         ["display_mode  = 'border'"] = {
-          opts = { view = { display_mode = "border", spacing = 1, min_column_width = 5 } },
+          opts = {
+            view = {
+              display_mode = "border",
+              spacing = 1,
+              min_column_width = 5,
+            },
+            parser = {
+              comments = { "#", "--" },
+            },
+          },
           lines = {
+            "# this is comment, so it should be ignored",
+            "-- this is also comment, so it should be ignored",
             "column1(number),column2(emoji),column3(string)",
             "111,😀,abcde",
             "222222222222,😒😒😒😒,fgh",
             "333333333333333333,😎b😎b😎b😎b😎b😎b,ijk",
           },
           expected = {
+            "# this is comment, so it should be ignored",
+            "-- this is also comment, so it should be ignored",
             "column1(number)    │column2(emoji)     │column3(string) ",
             "                111│😀                 │abcde           ",
             "       222222222222│😒😒😒😒           │fgh             ",
@@ -90,18 +117,21 @@ describe("view", function()
 
           -- compute metrics
           local co = coroutine.running()
-          metrics.compute_csv_metrics(bufnr, opts, function(fields, column_max_widths)
+          local metrics = CsvViewMetrics:new(bufnr, opts)
+          metrics:compute_buffer(function()
             vim.schedule(function()
-              coroutine.resume(co, fields, column_max_widths)
+              coroutine.resume(co)
             end)
           end)
 
           -- wait for the completion of the metrics computation
-          local fields, column_max_widths = coroutine.yield()
+          coroutine.yield()
 
           -- create view and render
-          local v = view.CsvView:new(bufnr, fields, column_max_widths, opts)
-          v:render(1, vim.api.nvim_buf_line_count(bufnr))
+          local winid = vim.api.nvim_get_current_win()
+          vim.api.nvim_win_set_buf(winid, bufnr)
+          local v = view.CsvView:new(bufnr, metrics, opts)
+          v:render(1, vim.api.nvim_buf_line_count(bufnr), winid)
 
           -- check the result
           local actual = get_lines_with_extmarks(bufnr, ns)

@@ -1,11 +1,12 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 
 --- Get end column of line
+---@param winid integer window id
 ---@param lnum integer 1-indexed lnum
 ---@return integer 0-indexed column
-local function end_col(lnum)
+local function end_col(winid, lnum)
   ---@diagnostic disable-next-line: assign-type-mismatch
-  return vim.fn.col({ lnum, "$" }) - 1
+  return vim.fn.col({ lnum, "$" }, winid) - 1
 end
 
 --- @class CsvView
@@ -157,7 +158,8 @@ end
 --- render
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
-function CsvView:render(top_lnum, bot_lnum)
+---@param winid integer window id
+function CsvView:render(top_lnum, bot_lnum, winid)
   -- self:render_column_index_header(top_lnum)
 
   --- render all fields in ranges
@@ -171,7 +173,7 @@ function CsvView:render(top_lnum, bot_lnum)
       -- highlight comment line
       self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
         hl_group = "CsvViewComment",
-        end_col = end_col(lnum),
+        end_col = end_col(winid, lnum),
       })
       goto continue
     end
@@ -251,7 +253,7 @@ function M.setup()
       -- render with current window range.
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      local ok, result = pcall(view.render, view, top, bot)
+      local ok, result = pcall(view.render, view, top, bot, winid)
       if not ok then
         vim.notify(string.format("csvview: error while rendering: %s", result), vim.log.levels.ERROR)
         M.detach(bufnr)
