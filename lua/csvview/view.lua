@@ -1,27 +1,32 @@
-local M = {}
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
+
+--- Get end column of line
+---@param winid integer window id
+---@param lnum integer 1-indexed lnum
+---@return integer 0-indexed column
+local function end_col(winid, lnum)
+  ---@diagnostic disable-next-line: assign-type-mismatch
+  return vim.fn.col({ lnum, "$" }, winid) - 1
+end
 
 --- @class CsvView
 --- @field bufnr integer
---- @field fields CsvFieldMetrics[][]
---- @field column_max_widths integer[]
+--- @field metrics CsvViewMetrics
 --- @field extmarks integer[]
 --- @field opts CsvViewOptions
 local CsvView = {}
 
 --- create new view
 ---@param bufnr integer
----@param fields CsvFieldMetrics[][]
----@param column_max_widths integer[]
+---@param metrics CsvViewMetrics
 ---@param opts CsvViewOptions
 ---@return CsvView
-function CsvView:new(bufnr, fields, column_max_widths, opts)
+function CsvView:new(bufnr, metrics, opts)
   self.__index = self
 
   local obj = {}
   obj.bufnr = bufnr
-  obj.fields = fields
-  obj.column_max_widths = column_max_widths
+  obj.metrics = metrics
   obj.extmarks = {}
   obj.opts = opts
   return setmetatable(obj, self)
@@ -31,7 +36,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvFieldMetrics
+---@param field CsvFieldMetrics.Field
 ---@param border boolean
 function CsvView:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
@@ -59,7 +64,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvFieldMetrics
+---@param field CsvFieldMetrics.Field
 ---@param border boolean
 function CsvView:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
@@ -86,11 +91,11 @@ end
 ---@param lnum integer 1-indexed lnum.render header above this line.
 function CsvView:render_column_index_header(lnum)
   local virt = {} --- @type string[][]
-  for i, width in ipairs(self.column_max_widths) do
+  for i, column in ipairs(self.metrics.columns) do
     local char = tostring(i)
-    virt[#virt + 1] = { string.rep(" ", width - #char) }
+    virt[#virt + 1] = { string.rep(" ", column.max_width - #char) }
     virt[#virt + 1] = { char }
-    if i < #self.column_max_widths then
+    if i < #self.metrics.columns then
       virt[#virt + 1] = { "," }
     end
   end
@@ -131,16 +136,17 @@ end
 --- render column
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
----@param field CsvFieldMetrics
+---@param field CsvFieldMetrics.Field
 ---@param offset integer 0-indexed byte offset
 function CsvView:render_column(lnum, column_index, field, offset)
-  if not self.column_max_widths[column_index] then
-    -- column_max_widths is not computed yet.
+  if not self.metrics.columns[column_index] then
+    -- not computed yet.
     return
   end
+
   -- if column is last, do not render border.
-  local render_border = column_index < #self.fields[lnum]
-  local colwidth = math.max(self.column_max_widths[column_index], self.opts.view.min_column_width)
+  local render_border = column_index < #self.metrics.rows[lnum].fields
+  local colwidth = math.max(self.metrics.columns[column_index].max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
   if field.is_number then
     self:_align_right(lnum, offset, padding, field, render_border)
@@ -152,18 +158,28 @@ end
 --- render
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
-function CsvView:render(top_lnum, bot_lnum)
+---@param winid integer window id
+function CsvView:render(top_lnum, bot_lnum, winid)
   -- self:render_column_index_header(top_lnum)
 
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
-    local line = self.fields[lnum]
+    local line = self.metrics.rows[lnum]
     if not line then
       goto continue
     end
 
+    if line.is_comment then
+      -- highlight comment line
+      self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+        hl_group = "CsvViewComment",
+        end_col = end_col(winid, lnum),
+      })
+      goto continue
+    end
+
     local offset = 0
-    for column_index, field in ipairs(line) do
+    for column_index, field in ipairs(line.fields) do
       self:render_column(lnum, column_index, field, offset)
       offset = offset + field.len + 1
     end
@@ -171,28 +187,25 @@ function CsvView:render(top_lnum, bot_lnum)
   end
 end
 
---- update item
----@param fields CsvFieldMetrics[][]
----@param column_max_widths integer[]
-function CsvView:update(fields, column_max_widths)
-  self.fields = fields
-  self.column_max_widths = column_max_widths
-end
+-------------------------------------------------------
+-- module exports
+-------------------------------------------------------
+
+local M = {}
 
 --- @type CsvView[]
 M._views = {}
 
 --- attach view for buffer
 ---@param bufnr integer
----@param fields CsvFieldMetrics[][] }
----@param column_max_widths number[]
+---@param metrics CsvViewMetrics
 ---@param opts CsvViewOptions
-function M.attach(bufnr, fields, column_max_widths, opts)
+function M.attach(bufnr, metrics, opts)
   if M._views[bufnr] then
     vim.notify("csvview: already attached for this buffer.")
     return
   end
-  M._views[bufnr] = CsvView:new(bufnr, fields, column_max_widths, opts)
+  M._views[bufnr] = CsvView:new(bufnr, metrics, opts)
   vim.cmd([[redraw!]])
 end
 
@@ -203,25 +216,22 @@ function M.detach(bufnr)
     return
   end
   M._views[bufnr]:clear()
+  M._views[bufnr].metrics:clear()
   M._views[bufnr] = nil
 end
 
---- start render
+--- Get view for buffer
 ---@param bufnr integer
----@param fields CsvFieldMetrics[][] }
----@param column_max_widths number[]
-function M.update(bufnr, fields, column_max_widths)
-  if not M._views[bufnr] then
-    return
-  end
-  M._views[bufnr]:update(fields, column_max_widths)
-  vim.cmd([[redraw!]])
+---@return CsvView?
+function M.get(bufnr)
+  return M._views[bufnr]
 end
 
 --- setup view
 function M.setup()
   -- set highlight
   vim.api.nvim_set_hl(0, "CsvViewDelimiter", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "CsvViewComment", { link = "Comment", default = true })
 
   -- set decorator
   vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
@@ -243,12 +253,10 @@ function M.setup()
       -- render with current window range.
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      local ok, result = pcall(view.render, view, top, bot)
+      local ok, result = pcall(view.render, view, top, bot, winid)
       if not ok then
         vim.notify(string.format("csvview: error while rendering: %s", result), vim.log.levels.ERROR)
-        view:clear()
-        view.column_max_widths = {}
-        view.fields = {}
+        M.detach(bufnr)
       end
 
       return false

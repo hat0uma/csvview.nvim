@@ -27,6 +27,19 @@ M.defaults = {
         tsv = "\t",
       },
     },
+
+    --- The comment prefix characters
+    --- If the line starts with one of these characters, it is treated as a comment.
+    --- Comment lines are not displayed in tabular format.
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable comment=#
+    --- @type string[]
+    comments = {
+      -- "#",
+      -- "--",
+      -- "//",
+    },
   },
   view = {
     --- minimum width of a column

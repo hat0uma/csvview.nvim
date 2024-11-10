@@ -10,10 +10,11 @@ With this plugin, you can easily view and edit CSV files within Neovim.
 - Displays the CSV/TSV file in a tabular format using virtual text.
 - Dynamically updates the CSV view as you edit, ensuring a seamless editing experience.
 - Asynchronous parsing enables comfortable handling of large CSV files.
+- Can ignore comment lines when displaying the CSV file.
 - Supports two display modes:
   - `highlight`: Highlights the delimiter.
   - `border`: Displays the delimiter with `│`.
-- Customizable delimiter character.
+- Customizable delimiter character and comment prefix.
 
 <table>
   <tr>
@@ -93,6 +94,20 @@ The configuration options are as follows:
       ft = {
         tsv = "\t",
       },
+    },
+
+    --- The comment prefix characters
+    --- If the line starts with one of these characters, it is treated as a comment.
+    --- Comment lines are not displayed in tabular format.
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable comment=#
+    --- @type string[]
+    comments = {
+      -- "#",
+      -- "--",
+      -- "//",
+    },
   },
   view = {
     --- minimum width of a column
@@ -119,9 +134,9 @@ After opening a CSV file, use the following commands to interact with the plugin
 
 ### Commands
 
-- `:CsvViewEnable [delimiter]`: Enable CSV view with the specified delimiter.
+- `:CsvViewEnable [options]`: Enable CSV view with the specified options.
 - `:CsvViewDisable`: Disable CSV view.
-- `:CsvViewToggle [delimiter]`: Toggle CSV view with the specified delimiter.
+- `:CsvViewToggle [options]`: Toggle CSV view with the specified options.
 
 ### Example
 
@@ -131,10 +146,10 @@ To toggle CSV view, use the following command. By default, the delimiter is `,` 
 :CsvViewToggle
 ```
 
-To toggle CSV view with a custom delimiter, use the following command.
+To toggle CSV view with a custom delimiter and comments, use the following command.
 
 ```vim
-:CsvViewToggle \t
+:CsvViewToggle delimiter="," comments="#"
 ```
 
 ### Lua API
@@ -149,6 +164,7 @@ To toggle CSV view with a custom delimiter, use the following command.
 | Group                | Default            | Description         |
 | -------------------- | ------------------ | ------------------- |
 | **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
+| **CsvViewComment**   | link to `Comment`  | used for comment    |
 
 ## License
 
