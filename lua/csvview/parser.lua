@@ -18,6 +18,19 @@ local function find_char(s, start_pos, char)
   return nil
 end
 
+--- Check if line is a comment
+---@param line string
+---@param opts CsvViewOptions
+---@return boolean
+local function is_comment_line(line, opts)
+  for _, comment in ipairs(opts.parser.comments) do
+    if vim.startswith(line, comment) then
+      return true
+    end
+  end
+  return false
+end
+
 --- Get delimiter character
 ---@param bufnr integer
 ---@param opts CsvViewOptions
@@ -95,7 +108,7 @@ end
 ---@param bufnr integer
 ---@param startlnum integer?
 ---@param endlnum integer?
----@param cb { on_line:fun( lnum:integer,columns:string[] ), on_end:fun() }
+---@param cb { on_line:fun( lnum:integer,is_comment:boolean,fields:string[]), on_end:fun() }
 ---@param opts CsvViewOptions
 function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
@@ -112,8 +125,15 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   local iter ---@type function
   iter = function()
     local chunkend = math.min(endlnum, startlnum + opts.parser.async_chunksize)
+
+    -- parse lines
     for i = startlnum, chunkend do
-      cb.on_line(i, M.get_fields(bufnr, i, delim))
+      local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, true)[1]
+      if is_comment_line(line, opts) then
+        cb.on_line(i, true, {})
+      else
+        cb.on_line(i, false, M._parse_line(line, delim))
+      end
     end
 
     -- next or end

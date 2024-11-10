@@ -5,14 +5,11 @@ local buffer_event = require("csvview.buffer_event")
 local config = require("csvview.config")
 local view = require("csvview.view")
 
---- @type integer[]
-local enable_buffers = {}
-
 --- check if csv table view is enabled
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  return vim.tbl_contains(enable_buffers, bufnr)
+  return view.get(bufnr) ~= nil
 end
 
 --- enable csv table view
@@ -26,7 +23,6 @@ function M.enable(bufnr, opts)
     vim.notify("csvview: already enabled for this buffer.")
     return
   end
-  table.insert(enable_buffers, bufnr)
 
   -- Calculate metrics and attach view.
   local metrics = CsvViewMetrics:new(bufnr, opts)
@@ -68,13 +64,6 @@ function M.disable(bufnr)
   if not M.is_enabled(bufnr) then
     vim.notify("csvview: not enabled for this buffer.")
     return
-  end
-
-  -- Remove buffer from enabled list.
-  for i = #enable_buffers, 1, -1 do
-    if enable_buffers[i] == bufnr then
-      table.remove(enable_buffers, i)
-    end
   end
 
   -- Unregister buffer events and detach view.

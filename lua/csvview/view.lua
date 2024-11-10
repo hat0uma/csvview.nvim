@@ -1,5 +1,12 @@
-local M = {}
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
+
+--- Get end column of line
+---@param lnum integer 1-indexed lnum
+---@return integer 0-indexed column
+local function end_col(lnum)
+  ---@diagnostic disable-next-line: assign-type-mismatch
+  return vim.fn.col({ lnum, "$" }) - 1
+end
 
 --- @class CsvView
 --- @field bufnr integer
@@ -160,6 +167,15 @@ function CsvView:render(top_lnum, bot_lnum)
       goto continue
     end
 
+    if line.is_comment then
+      -- highlight comment line
+      self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+        hl_group = "CsvViewComment",
+        end_col = end_col(lnum),
+      })
+      goto continue
+    end
+
     local offset = 0
     for column_index, field in ipairs(line.fields) do
       self:render_column(lnum, column_index, field, offset)
@@ -168,6 +184,12 @@ function CsvView:render(top_lnum, bot_lnum)
     ::continue::
   end
 end
+
+-------------------------------------------------------
+-- module exports
+-------------------------------------------------------
+
+local M = {}
 
 --- @type CsvView[]
 M._views = {}
@@ -192,13 +214,22 @@ function M.detach(bufnr)
     return
   end
   M._views[bufnr]:clear()
+  M._views[bufnr].metrics:clear()
   M._views[bufnr] = nil
+end
+
+--- Get view for buffer
+---@param bufnr integer
+---@return CsvView?
+function M.get(bufnr)
+  return M._views[bufnr]
 end
 
 --- setup view
 function M.setup()
   -- set highlight
   vim.api.nvim_set_hl(0, "CsvViewDelimiter", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "CsvViewComment", { link = "Comment", default = true })
 
   -- set decorator
   vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
@@ -223,8 +254,7 @@ function M.setup()
       local ok, result = pcall(view.render, view, top, bot)
       if not ok then
         vim.notify(string.format("csvview: error while rendering: %s", result), vim.log.levels.ERROR)
-        view:clear()
-        view.metrics:clear()
+        M.detach(bufnr)
       end
 
       return false

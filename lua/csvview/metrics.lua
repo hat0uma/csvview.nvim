@@ -8,7 +8,8 @@ local parser = require("csvview.parser")
 local CsvViewMetrics = {}
 
 --- @class CsvViewMetrics.Row
---- @field fields CsvFieldMetrics.Field[]
+--- @field is_comment boolean
+--- @field fields CsvFieldMetrics.Field[] | nil
 
 --- @class CsvViewMetrics.Column
 --- @field max_width integer
@@ -70,14 +71,19 @@ end
 function CsvViewMetrics:_compute(startlnum, endlnum, on_end)
   -- parse buffer and update metrics
   parser.iter_lines_async(self._bufnr, startlnum, endlnum, {
-    on_line = function(lnum, columns)
-      self.rows[lnum] = { fields = {} }
-      for i, column in ipairs(columns) do
-        local width = vim.fn.strdisplaywidth(column)
+    on_line = function(lnum, is_comment, fields)
+      if is_comment then
+        self.rows[lnum] = { is_comment = is_comment, fields = nil }
+        return
+      end
+
+      self.rows[lnum] = { is_comment = false, fields = {} }
+      for i, field in ipairs(fields) do
+        local width = vim.fn.strdisplaywidth(field)
         self.rows[lnum].fields[i] = {
-          len = #column,
+          len = #field,
           display_width = width,
-          is_number = tonumber(column) ~= nil,
+          is_number = tonumber(field) ~= nil,
         }
       end
     end,
@@ -95,6 +101,10 @@ function CsvViewMetrics:_update_column_metrics()
   --- @type CsvViewMetrics.Column[]
   local columns = {}
   for _, row in ipairs(self.rows) do
+    if row.is_comment then
+      goto continue
+    end
+
     for j, field in ipairs(row.fields) do
       local width = field.display_width
 
@@ -108,6 +118,8 @@ function CsvViewMetrics:_update_column_metrics()
         columns[j].max_width = width
       end
     end
+
+    ::continue::
   end
   self.columns = columns
 end

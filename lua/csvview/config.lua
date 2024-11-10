@@ -27,6 +27,17 @@ M.defaults = {
         tsv = "\t",
       },
     },
+
+    --- The comment characters
+    --- You can specify a list of comment characters.
+    --- e.g:
+    ---  comment = {
+    ---    "#",
+    ---    "--",
+    ---    "//",
+    ---  }
+    --- @type string[]
+    comments = {},
   },
   view = {
     --- minimum width of a column
