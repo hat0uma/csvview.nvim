@@ -28,6 +28,16 @@ M.defaults = {
       },
     },
 
+    --- The quote character
+    --- If a field is enclosed in this character, it is treated as a single field and the delimiter in it will be ignored.
+    --- e.g:
+    ---  quote_char= "'"
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable quote_char='
+    --- @type string
+    quote_char = '"',
+
     --- The comment prefix characters
     --- If the line starts with one of these characters, it is treated as a comment.
     --- Comment lines are not displayed in tabular format.
