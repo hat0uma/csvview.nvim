@@ -1,8 +1,5 @@
 local M = {}
 
-local DQUOTE = string.byte('"')
-local SQUOTE = string.byte("'")
-
 --- Find the next character in a string.
 ---@param s string
 ---@param start_pos integer start position
@@ -56,11 +53,29 @@ local function delim_byte(bufnr, opts)
   return char:byte()
 end
 
+--- Get quote char character
+---@param bufnr integer
+---@param opts CsvViewOptions
+---@return integer
+local function quote_char_byte(bufnr, opts)
+  local delim = opts.parser.quote_char
+  ---@diagnostic disable-next-line: no-unknown
+  local char
+  if type(delim) == "string" then
+    char = delim
+  end
+
+  assert(type(char) == "string", string.format("quote char must be a string, got %s", type(char)))
+  assert(#char == 1, string.format("quote char must be a single character, got %s", char))
+  return char:byte()
+end
+
 --- parse line
 ---@param line string
 ---@param delim integer
+---@param quote_char integer
 ---@return string[]
-function M._parse_line(line, delim)
+function M._parse_line(line, delim, quote_char)
   local len = #line
   if len == 0 then
     return {}
@@ -76,7 +91,7 @@ function M._parse_line(line, delim)
       -- add field (even if empty).
       fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
       field_start_pos = pos + 1
-    elseif char == DQUOTE or char == SQUOTE then
+    elseif char == quote_char then
       -- find closing quote and skip it.
       -- if there is no closing quote, skip the rest of the line.
       local close_pos = find_char(line, pos + 1, char)
@@ -98,10 +113,11 @@ end
 ---@param bufnr integer
 ---@param lnum integer
 ---@param delim integer
+---@param quote_char integer
 ---@return string[]
-function M.get_fields(bufnr, lnum, delim)
+function M.get_fields(bufnr, lnum, delim, quote_char)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, true)
-  return M._parse_line(line[1], delim)
+  return M._parse_line(line[1], delim, quote_char)
 end
 
 --- iterate fields async
@@ -115,6 +131,7 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
 
   local delim = delim_byte(bufnr, opts)
+  local quote_char = quote_char_byte(bufnr, opts)
   local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
   local start_time = vim.uv.now()
   if iter_num > 500 then
@@ -132,7 +149,7 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
       if is_comment_line(line, opts) then
         cb.on_line(i, true, {})
       else
-        cb.on_line(i, false, M._parse_line(line, delim))
+        cb.on_line(i, false, M._parse_line(line, delim, quote_char))
       end
     end
 

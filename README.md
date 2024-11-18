@@ -96,6 +96,16 @@ The configuration options are as follows:
       },
     },
 
+    --- The quote character
+    --- If a field is enclosed in this character, it is treated as a single field and the delimiter in it will be ignored.
+    --- e.g:
+    ---  quote_char= "'"
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable quote_char='
+    --- @type string
+    quote_char = '"',
+
     --- The comment prefix characters
     --- If the line starts with one of these characters, it is treated as a comment.
     --- Comment lines are not displayed in tabular format.
@@ -146,10 +156,10 @@ To toggle CSV view, use the following command. By default, the delimiter is `,` 
 :CsvViewToggle
 ```
 
-To toggle CSV view with a custom delimiter and comment, use the following command.
+To toggle CSV view with a custom field delimiter, a custom string delimiter and comment, use the following command.
 
 ```vim
-:CsvViewToggle delimiter=, comment=#
+:CsvViewToggle delimiter=, quote_char=' comment=#
 ```
 
 ### Lua API

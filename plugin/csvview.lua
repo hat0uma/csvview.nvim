@@ -2,6 +2,7 @@ local csvview = require("csvview")
 
 local opts_keys = {
   "delimiter",
+  "quote_char",
   "comment",
 }
 
@@ -58,6 +59,8 @@ local function opts_for_command(args)
   for _, opt in ipairs(cmdline_opts) do
     if opt.key == "delimiter" then
       opts.parser.delimiter = opt.value
+    elseif opt.key == "quote_char" then
+      opts.parser.quote_char = opt.value
     elseif opt.key == "comment" then
       opts.parser.comments = { opt.value }
     end
