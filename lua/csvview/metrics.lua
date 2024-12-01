@@ -9,13 +9,13 @@ local CsvViewMetrics = {}
 
 --- @class CsvViewMetrics.Row
 --- @field is_comment boolean
---- @field fields CsvFieldMetrics.Field[]
+--- @field fields CsvViewMetrics.Field[]
 
 --- @class CsvViewMetrics.Column
 --- @field max_width integer
 --- @field max_row integer
 
---- @class CsvFieldMetrics.Field
+--- @class CsvViewMetrics.Field
 --- @field len integer
 --- @field display_width integer
 --- @field is_number boolean
@@ -53,8 +53,11 @@ end
 --- Metrics are optimized to recalculate only the changed range.
 --- However, the entire column is recalculated in the following cases.
 ---   (1) If the line recorded as the maximum width of the column is deleted.
----   (2) If the maximum width has shrunk.
----
+---       See: [MAX_ROW_DELETION] (in `_mark_recalculation_on_delete`)
+---   (2) If a field was deleted and it was the maximum width in its column.
+---       See: [MAX_FIELD_DELETION] (in `_mark_recalculation_on_decrease_fields`)
+---   (3) If the maximum width has shrunk.
+---       See: [SHRINK_WIDTH] (in `_adjust_column_metrics_for_row`)
 ---@param first integer first line number
 ---@param prev_last integer previous last line
 ---@param last integer current last line
@@ -63,6 +66,7 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   ---@type table<integer,boolean>
   local recalculate_columns = {}
 
+  -- print("update", first, prev_last, last)
   local delta = last - prev_last
   if delta > 0 then
     self:_add_row_placeholders(prev_last, delta)
@@ -98,7 +102,7 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       -- Recalculate column metrics if necessary
       -- vim.print("recalculate_columns", recalculate_columns)
       for col_idx, _ in pairs(recalculate_columns) do
-        self:_compute_metrics_for_column(col_idx)
+        self:_recalculate_column(col_idx)
       end
 
       if on_end then
@@ -130,9 +134,9 @@ function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   return row
 end
 
---- Compute column metrics for the specified column
+--- Recalculate column metrics for the specified column
 ---@param col_idx integer
-function CsvViewMetrics:_compute_metrics_for_column(col_idx)
+function CsvViewMetrics:_recalculate_column(col_idx)
   local max_width = 0
   local max_row = nil
 
@@ -162,8 +166,18 @@ end
 ---@param last integer
 ---@param recalculate_columns table<integer,boolean>
 function CsvViewMetrics:_mark_recalculation_on_delete(prev_last, last, recalculate_columns)
+  -- [MAX_ROW_DELETION]
+  -- If the deleted line was the maximum line of the column, it is recalculated.
+  -- e.g.
+  -- before:
+  --    123456,12,12 <- delete this line
+  --    123,123,123
+  -- after:
+  --    123,123,123
+  --
+  -- -> prev_last = 1, last = 0
+  -- In this case, the column metrics for the first column need to be recalculated.
   for col_idx, column in ipairs(self.columns) do
-    -- If the deleted line was the maximum line of the column, it is recalculated.
     if column.max_row > last and column.max_row <= prev_last then
       recalculate_columns[col_idx] = true
     end
@@ -175,10 +189,21 @@ end
 ---@param prev_row CsvViewMetrics.Row
 ---@param recalculate_columns table<integer,boolean>
 function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row, recalculate_columns)
+  -- [MAX_FIELD_DELETION]
+  -- If a field is deleted and it was the maximum width in its column, mark the column for recalculation.
+  -- e.g.
+  -- before:
+  --    123456,123456,123456
+  --    123,123,123
+  -- after:
+  --    123456,123456
+  --    123,123,123
+  --
+  -- In this case, the column metrics for the third column need to be recalculated.
   local row = self.rows[row_idx]
 
-  -- If the number of fields has decreased, recalculate the columns from that point on.
   for col_idx = #row.fields + 1, #prev_row.fields do
+    -- Check if the column exists and if the current row was the maximum width row for this column.
     if self.columns[col_idx] and self.columns[col_idx].max_row == row_idx then
       recalculate_columns[col_idx] = true
     end
@@ -193,20 +218,27 @@ function CsvViewMetrics:_adjust_column_metrics_for_row(row_idx, recalculate_colu
 
   -- Update column metrics
   for col_idx, field in ipairs(row.fields) do
-    local column = self.columns[col_idx]
+    local column = self:_ensure_column(col_idx)
     local width = field.display_width
 
-    -- Initialize column metrics
-    if not column then
-      self.columns[col_idx] = { max_width = width, max_row = row_idx }
-    elseif width > column.max_width then
+    if width > column.max_width then
       column.max_width = width
       column.max_row = row_idx
     elseif column.max_row == row_idx and width < column.max_width then
-      -- Mark for recalculation if max width shrinks
+      -- [SHRINK_WIDTH] Mark for recalculation if max width shrinks
       recalculate_columns[col_idx] = true
     end
   end
+end
+
+--- Ensure column metrics
+---@param col_idx integer
+---@return CsvViewMetrics.Column
+function CsvViewMetrics:_ensure_column(col_idx)
+  if not self.columns[col_idx] then
+    self.columns[col_idx] = { max_width = 0, max_row = 0 }
+  end
+  return self.columns[col_idx]
 end
 
 --- Add row placeholders
