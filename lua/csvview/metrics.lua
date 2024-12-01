@@ -1,5 +1,7 @@
 local parser = require("csvview.parser")
 
+local nop = function() end
+
 --- @class CsvViewMetrics
 --- @field public rows CsvViewMetrics.Row[]
 --- @field public columns CsvViewMetrics.Column[]
@@ -45,6 +47,7 @@ end
 --- Compute metrics for the entire buffer
 ---@param on_end fun()? callback for when the update is complete
 function CsvViewMetrics:compute_buffer(on_end)
+  on_end = on_end or nop
   self:_compute_metrics(nil, nil, {}, on_end)
 end
 
@@ -58,11 +61,14 @@ end
 ---       See: [MAX_FIELD_DELETION] (in `_mark_recalculation_on_decrease_fields`)
 ---   (3) If the maximum width has shrunk.
 ---       See: [SHRINK_WIDTH] (in `_adjust_column_metrics_for_row`)
+---
 ---@param first integer first line number
 ---@param prev_last integer previous last line
 ---@param last integer current last line
 ---@param on_end fun()? callback for when the update is complete
 function CsvViewMetrics:update(first, prev_last, last, on_end)
+  on_end = on_end or nop
+
   ---@type table<integer,boolean>
   local recalculate_columns = {}
 
@@ -84,7 +90,7 @@ end
 ---@param startlnum integer? if present, compute only specified range
 ---@param endlnum integer? if present, compute only specified range
 ---@param recalculate_columns table<integer,boolean> recalculate specified columns
----@param on_end fun()? callback for when the update is complete
+---@param on_end fun() callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
   parser.iter_lines_async(self._bufnr, startlnum, endlnum, {
@@ -93,9 +99,7 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
 
       -- Update row metrics and adjust column metrics
       self.rows[lnum] = self:_compute_metrics_for_row(is_comment, fields)
-      if prev_row then
-        self:_mark_recalculation_on_decrease_fields(lnum, prev_row, recalculate_columns)
-      end
+      self:_mark_recalculation_on_decrease_fields(lnum, prev_row, recalculate_columns)
       self:_adjust_column_metrics_for_row(lnum, recalculate_columns)
     end,
     on_end = function()
@@ -105,9 +109,8 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
         self:_recalculate_column(col_idx)
       end
 
-      if on_end then
-        on_end()
-      end
+      -- notify the end of the update
+      on_end()
     end,
   }, self._opts)
 end
@@ -186,7 +189,7 @@ end
 
 --- Mark column for recalculation on decrease fields
 ---@param row_idx integer
----@param prev_row CsvViewMetrics.Row
+---@param prev_row CsvViewMetrics.Row | nil
 ---@param recalculate_columns table<integer,boolean>
 function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row, recalculate_columns)
   -- [MAX_FIELD_DELETION]
@@ -200,6 +203,10 @@ function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row
   --    123,123,123
   --
   -- In this case, the column metrics for the third column need to be recalculated.
+  if not prev_row then
+    return
+  end
+
   local row = self.rows[row_idx]
 
   for col_idx = #row.fields + 1, #prev_row.fields do
