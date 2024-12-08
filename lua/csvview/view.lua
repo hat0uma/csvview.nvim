@@ -36,7 +36,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvFieldMetrics.Field
+---@param field CsvViewMetrics.Field
 ---@param border boolean
 function CsvView:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
@@ -64,7 +64,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvFieldMetrics.Field
+---@param field CsvViewMetrics.Field
 ---@param border boolean
 function CsvView:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
@@ -136,7 +136,7 @@ end
 --- render column
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
----@param field CsvFieldMetrics.Field
+---@param field CsvViewMetrics.Field
 ---@param offset integer 0-indexed byte offset
 function CsvView:render_column(lnum, column_index, field, offset)
   if not self.metrics.columns[column_index] then
