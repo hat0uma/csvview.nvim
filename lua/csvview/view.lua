@@ -1,4 +1,5 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
+local util = require("csvview.util")
 
 --- Get end column of line
 ---@param winid integer window id
@@ -133,12 +134,12 @@ function CsvView:clear()
   self.extmarks = {}
 end
 
---- render column
+--- Render field in line
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
 ---@param field CsvViewMetrics.Field
 ---@param offset integer 0-indexed byte offset
-function CsvView:render_column(lnum, column_index, field, offset)
+function CsvView:_render_field(lnum, column_index, field, offset)
   if not self.metrics.columns[column_index] then
     -- not computed yet.
     return
@@ -155,7 +156,36 @@ function CsvView:render_column(lnum, column_index, field, offset)
   end
 end
 
---- render
+--- Render line
+---@param lnum integer 1-indexed lnum
+---@param winid integer window id
+function CsvView:_render_line(lnum, winid)
+  local line = self.metrics.rows[lnum]
+  if not line then
+    return
+  end
+
+  if line.is_comment then
+    -- highlight comment line
+    self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+      hl_group = "CsvViewComment",
+      end_col = end_col(winid, lnum),
+    })
+    return
+  end
+
+  -- render fields
+  local offset = 0
+  for column_index, field in ipairs(line.fields) do
+    local ok, err = xpcall(self._render_field, util.wrap_stacktrace, self, lnum, column_index, field, offset)
+    if not ok then
+      util.error_with_context(err, { lnum = lnum, column_index = column_index })
+    end
+    offset = offset + field.len + 1
+  end
+end
+
+--- Render view
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
 ---@param winid integer window id
@@ -164,26 +194,10 @@ function CsvView:render(top_lnum, bot_lnum, winid)
 
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
-    local line = self.metrics.rows[lnum]
-    if not line then
-      goto continue
+    local ok, err = xpcall(self._render_line, util.wrap_stacktrace, self, lnum, winid)
+    if not ok then
+      util.error_with_context(err, { lnum = lnum })
     end
-
-    if line.is_comment then
-      -- highlight comment line
-      self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
-        hl_group = "CsvViewComment",
-        end_col = end_col(winid, lnum),
-      })
-      goto continue
-    end
-
-    local offset = 0
-    for column_index, field in ipairs(line.fields) do
-      self:render_column(lnum, column_index, field, offset)
-      offset = offset + field.len + 1
-    end
-    ::continue::
   end
 end
 
@@ -253,9 +267,9 @@ function M.setup()
       -- render with current window range.
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      local ok, result = pcall(view.render, view, top, bot, winid)
+      local ok, err = xpcall(view.render, util.wrap_stacktrace, view, top, bot, winid)
       if not ok then
-        vim.notify(string.format("csvview: error while rendering: %s", result), vim.log.levels.ERROR)
+        util.print_structured_error("CsvView Rendering Stopped with Error", err)
         M.detach(bufnr)
       end
 

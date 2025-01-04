@@ -1,4 +1,9 @@
 local M = {}
+local util = require("csvview.util")
+
+---@class Csvview.Parser.Callbacks
+---@field on_line fun(lnum:integer,is_comment:boolean,fields:string[]) the callback to be called for each line
+---@field on_end fun() the callback to be called when parsing is done
 
 --- Find the next character in a string.
 ---@param s string
@@ -109,64 +114,87 @@ function M._parse_line(line, delim, quote_char)
   return fields
 end
 
---- get fields of line
+---@async
+--- iterate fields
+---@param startlnum integer  1-indexed start line number
+---@param endlnum integer  1-indexed end line number
 ---@param bufnr integer
----@param lnum integer
----@param delim integer
----@param quote_char integer
----@return string[]
-function M.get_fields(bufnr, lnum, delim, quote_char)
-  local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, true)
-  return M._parse_line(line[1], delim, quote_char)
+---@param opts CsvViewOptions
+---@param cb Csvview.Parser.Callbacks
+local function iter(startlnum, endlnum, bufnr, opts, cb)
+  local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
+  local should_notify = iter_num > 1000
+  local start_time = vim.uv.now()
+  if should_notify then
+    vim.notify("csvview: parsing buffer, please wait...")
+  end
+
+  local delim = delim_byte(bufnr, opts)
+  local quote_char = quote_char_byte(bufnr, opts)
+
+  local function parse_line(lnum) ---@param lnum integer
+    local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, true)[1]
+    if is_comment_line(line, opts) then
+      cb.on_line(lnum, true, {})
+    else
+      local fields = M._parse_line(line, delim, quote_char)
+      cb.on_line(lnum, false, fields)
+    end
+  end
+
+  -- iterate lines
+  local parsed_num = 0
+  for i = startlnum, endlnum do
+    local ok, err = xpcall(parse_line, util.wrap_stacktrace, i)
+    if not ok then
+      util.error_with_context(err, { lnum = i })
+    end
+
+    -- yield every chunksize
+    parsed_num = parsed_num + 1
+    if parsed_num >= opts.parser.async_chunksize then
+      parsed_num = 0
+      coroutine.yield()
+    end
+  end
+
+  -- notify end of parsing
+  cb.on_end()
+  if should_notify then
+    local elapsed = vim.loop.now() - start_time
+    vim.notify(string.format("csvview: parsing buffer done in %d[ms]", elapsed))
+  end
 end
 
 --- iterate fields async
 ---@param bufnr integer
 ---@param startlnum integer?
 ---@param endlnum integer?
----@param cb { on_line:fun( lnum:integer,is_comment:boolean,fields:string[]), on_end:fun() }
+---@param cb Csvview.Parser.Callbacks
 ---@param opts CsvViewOptions
 function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
 
-  local delim = delim_byte(bufnr, opts)
-  local quote_char = quote_char_byte(bufnr, opts)
-  local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
-  local start_time = vim.uv.now()
-  if iter_num > 500 then
-    vim.notify("csvview: parsing buffer, please wait...")
-  end
-
-  -- Run in small chunks to avoid blocking the main thread
-  local iter ---@type function
-  iter = function()
-    local chunkend = math.min(endlnum, startlnum + opts.parser.async_chunksize)
-
-    -- parse lines
-    for i = startlnum, chunkend do
-      local line = vim.api.nvim_buf_get_lines(bufnr, i - 1, i, true)[1]
-      if is_comment_line(line, opts) then
-        cb.on_line(i, true, {})
-      else
-        cb.on_line(i, false, M._parse_line(line, delim, quote_char))
-      end
+  -- create coroutine to iterate lines
+  local co = coroutine.create(function() ---@async
+    local ok, err = xpcall(iter, util.wrap_stacktrace, startlnum, endlnum, bufnr, opts, cb)
+    if not ok then
+      util.error_with_context(err, { startlnum = startlnum, endlnum = endlnum })
     end
+  end)
 
-    -- next or end
-    if chunkend < endlnum then
-      startlnum = chunkend + 1
-      vim.schedule(iter)
-    else
-      if iter_num > 500 then
-        local elapsed = vim.uv.now() - start_time
-        vim.notify(string.format("csvview: parsing buffer done in %d[ms]", elapsed))
-      end
-      cb.on_end()
+  local function resume_co()
+    local ok, err = coroutine.resume(co)
+    if not ok then
+      util.print_structured_error("CsvView Error parsing buffer", err)
+    elseif coroutine.status(co) ~= "dead" then
+      vim.schedule(resume_co)
     end
   end
 
-  iter()
+  -- start coroutine
+  resume_co()
 end
 
 return M
