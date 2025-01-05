@@ -43,6 +43,12 @@ describe("Cmdline", function()
         expected = { section = { text1 = "abc", number = 2 } },
       },
       {
+        name = "should ignore options not in the list",
+        input = "text1=abc number=2 unknown_option=3",
+        default = { section = {} },
+        expected = { section = { text1 = "abc", number = 2 } },
+      },
+      {
         name = "should parse escaped spaces",
         input = "text1=abc number=2 another=escaped\\ space\\ value",
         default = { section = {} },

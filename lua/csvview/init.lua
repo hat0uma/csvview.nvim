@@ -14,7 +14,7 @@ end
 
 --- enable csv table view
 ---@param bufnr integer?
----@param opts CsvViewOptions?
+---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   opts = config.get(opts)
@@ -73,7 +73,7 @@ end
 
 --- toggle csv table view
 ---@param bufnr integer?
----@param opts CsvViewOptions?
+---@param opts CsvView.Options?
 function M.toggle(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if M.is_enabled(bufnr) then
@@ -84,7 +84,7 @@ function M.toggle(bufnr, opts)
 end
 
 --- setup
----@param opts CsvViewOptions?
+---@param opts CsvView.Options?
 function M.setup(opts)
   config.setup(opts)
   view.setup()

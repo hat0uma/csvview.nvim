@@ -2,30 +2,30 @@ local parser = require("csvview.parser")
 
 local nop = function() end
 
---- @class CsvViewMetrics
---- @field public rows CsvViewMetrics.Row[]
---- @field public columns CsvViewMetrics.Column[]
+--- @class CsvView.Metrics
+--- @field public rows CsvView.Metrics.Row[]
+--- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
---- @field private _opts CsvViewOptions
+--- @field private _opts CsvView.Options
 local CsvViewMetrics = {}
 
---- @class CsvViewMetrics.Row
---- @field is_comment boolean
---- @field fields CsvViewMetrics.Field[]
+--- @class CsvView.Metrics.Row
+--- @field is_comment boolean?
+--- @field fields CsvView.Metrics.Field[]
 
---- @class CsvViewMetrics.Column
+--- @class CsvView.Metrics.Column
 --- @field max_width integer
 --- @field max_row integer
 
---- @class CsvViewMetrics.Field
+--- @class CsvView.Metrics.Field
 --- @field len integer
 --- @field display_width integer
 --- @field is_number boolean
 
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
----@param opts CsvViewOptions
----@return CsvViewMetrics
+---@param opts CsvView.Options
+---@return CsvView.Metrics
 function CsvViewMetrics:new(bufnr, opts)
   self.__index = self
 
@@ -40,8 +40,13 @@ end
 
 --- Clear metrics
 function CsvViewMetrics:clear()
-  self.rows = {}
-  self.columns = {}
+  for _ = 1, #self.rows do
+    table.remove(self.rows)
+  end
+
+  for _ = 1, #self.columns do
+    table.remove(self.columns)
+  end
 end
 
 --- Compute metrics for the entire buffer
@@ -118,14 +123,14 @@ end
 --- Compute row metrics
 ---@param is_comment boolean
 ---@param fields string[]
----@return CsvViewMetrics.Row
+---@return CsvView.Metrics.Row
 function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   if is_comment then
     return { is_comment = true, fields = {} }
   end
 
   -- Compute field metrics
-  local row = { is_comment = false, fields = {} } ---@type CsvViewMetrics.Row
+  local row = { fields = {} } ---@type CsvView.Metrics.Row
   for _, field in ipairs(fields) do
     local width = vim.fn.strdisplaywidth(field)
     table.insert(row.fields, {
@@ -189,7 +194,7 @@ end
 
 --- Mark column for recalculation on decrease fields
 ---@param row_idx integer
----@param prev_row CsvViewMetrics.Row | nil
+---@param prev_row CsvView.Metrics.Row | nil
 ---@param recalculate_columns table<integer,boolean>
 function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row, recalculate_columns)
   -- [MAX_FIELD_DELETION]
@@ -240,7 +245,7 @@ end
 
 --- Ensure column metrics
 ---@param col_idx integer
----@return CsvViewMetrics.Column
+---@return CsvView.Metrics.Column
 function CsvViewMetrics:_ensure_column(col_idx)
   if not self.columns[col_idx] then
     self.columns[col_idx] = { max_width = 0, max_row = 0 }
@@ -253,7 +258,7 @@ end
 ---@param num integer
 function CsvViewMetrics:_add_row_placeholders(prev_last, num)
   for _ = 1, num do
-    table.insert(self.rows, prev_last + 1, { is_comment = false, fields = {} })
+    table.insert(self.rows, prev_last + 1, { fields = {} })
   end
 end
 

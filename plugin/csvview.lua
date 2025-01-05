@@ -4,7 +4,7 @@ local csvview = require("csvview")
 local cmdline = Cmdline:new({
   {
     name = "delimiter",
-    ---@param options CsvViewOptions
+    ---@param options CsvView.Options
     ---@param value string
     set = function(options, value)
       options.parser.delimiter = value
@@ -12,7 +12,7 @@ local cmdline = Cmdline:new({
   },
   {
     name = "quote_char",
-    ---@param options CsvViewOptions
+    ---@param options CsvView.Options
     ---@param value string
     set = function(options, value)
       options.parser.quote_char = value
@@ -20,7 +20,7 @@ local cmdline = Cmdline:new({
   },
   {
     name = "comment",
-    ---@param options CsvViewOptions
+    ---@param options CsvView.Options
     ---@param value string
     set = function(options, value)
       options.parser.comments = { value }

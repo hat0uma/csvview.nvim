@@ -1,6 +1,6 @@
 local M = {}
 
---- @class CsvViewOptions
+--- @class CsvView.Options
 M.defaults = {
   parser = {
     --- The number of lines that the asynchronous parser processes per cycle.
@@ -71,14 +71,14 @@ M.defaults = {
 M.options = {}
 
 --- get config
----@param opts? CsvViewOptions
----@return CsvViewOptions
+---@param opts? CsvView.Options
+---@return CsvView.Options
 function M.get(opts)
   return vim.tbl_deep_extend("force", M.options, opts or {})
 end
 
 --- setup
----@param opts? CsvViewOptions
+---@param opts? CsvView.Options
 function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 end

@@ -10,19 +10,19 @@ local function end_col(winid, lnum)
   return vim.fn.col({ lnum, "$" }, winid) - 1
 end
 
---- @class CsvView
+--- @class CsvView.View
 --- @field bufnr integer
---- @field metrics CsvViewMetrics
+--- @field metrics CsvView.Metrics
 --- @field extmarks integer[]
---- @field opts CsvViewOptions
-local CsvView = {}
+--- @field opts CsvView.Options
+local View = {}
 
 --- create new view
 ---@param bufnr integer
----@param metrics CsvViewMetrics
----@param opts CsvViewOptions
----@return CsvView
-function CsvView:new(bufnr, metrics, opts)
+---@param metrics CsvView.Metrics
+---@param opts CsvView.Options
+---@return CsvView.View
+function View:new(bufnr, metrics, opts)
   self.__index = self
 
   local obj = {}
@@ -37,9 +37,9 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvViewMetrics.Field
+---@param field CsvView.Metrics.Field
 ---@param border boolean
-function CsvView:_align_left(lnum, offset, padding, field, border)
+function View:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
     self.extmarks[#self.extmarks + 1] =
       vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset + field.len, {
@@ -65,9 +65,9 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 ---@param padding integer
----@param field CsvViewMetrics.Field
+---@param field CsvView.Metrics.Field
 ---@param border boolean
-function CsvView:_align_right(lnum, offset, padding, field, border)
+function View:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
     self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
       virt_text = { { string.rep(" ", padding) } },
@@ -90,7 +90,7 @@ end
 
 --- render column index header
 ---@param lnum integer 1-indexed lnum.render header above this line.
-function CsvView:render_column_index_header(lnum)
+function View:render_column_index_header(lnum)
   local virt = {} --- @type string[][]
   for i, column in ipairs(self.metrics.columns) do
     local char = tostring(i)
@@ -109,7 +109,7 @@ end
 --- highlight delimiter char
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
-function CsvView:_highlight_delimiter(lnum, offset)
+function View:_highlight_delimiter(lnum, offset)
   self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     hl_group = "CsvViewDelimiter",
     end_col = offset + 1,
@@ -119,7 +119,7 @@ end
 --- render table border
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
-function CsvView:_render_border(lnum, offset)
+function View:_render_border(lnum, offset)
   self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     virt_text = { { "│", "CsvViewDelimiter" } },
     virt_text_pos = "overlay",
@@ -127,19 +127,19 @@ function CsvView:_render_border(lnum, offset)
 end
 
 --- clear view
-function CsvView:clear()
-  for _, id in pairs(self.extmarks) do
+function View:clear()
+  for _ = 1, #self.extmarks do
+    local id = table.remove(self.extmarks)
     vim.api.nvim_buf_del_extmark(self.bufnr, EXTMARK_NS, id)
   end
-  self.extmarks = {}
 end
 
 --- Render field in line
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
----@param field CsvViewMetrics.Field
+---@param field CsvView.Metrics.Field
 ---@param offset integer 0-indexed byte offset
-function CsvView:_render_field(lnum, column_index, field, offset)
+function View:_render_field(lnum, column_index, field, offset)
   if not self.metrics.columns[column_index] then
     -- not computed yet.
     return
@@ -159,7 +159,7 @@ end
 --- Render line
 ---@param lnum integer 1-indexed lnum
 ---@param winid integer window id
-function CsvView:_render_line(lnum, winid)
+function View:_render_line(lnum, winid)
   local line = self.metrics.rows[lnum]
   if not line then
     return
@@ -189,7 +189,7 @@ end
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
 ---@param winid integer window id
-function CsvView:render(top_lnum, bot_lnum, winid)
+function View:render(top_lnum, bot_lnum, winid)
   -- self:render_column_index_header(top_lnum)
 
   --- render all fields in ranges
@@ -207,19 +207,19 @@ end
 
 local M = {}
 
---- @type CsvView[]
+--- @type CsvView.View[]
 M._views = {}
 
 --- attach view for buffer
 ---@param bufnr integer
----@param metrics CsvViewMetrics
----@param opts CsvViewOptions
+---@param metrics CsvView.Metrics
+---@param opts CsvView.Options
 function M.attach(bufnr, metrics, opts)
   if M._views[bufnr] then
     vim.notify("csvview: already attached for this buffer.")
     return
   end
-  M._views[bufnr] = CsvView:new(bufnr, metrics, opts)
+  M._views[bufnr] = View:new(bufnr, metrics, opts)
   vim.cmd([[redraw!]])
 end
 
@@ -236,7 +236,7 @@ end
 
 --- Get view for buffer
 ---@param bufnr integer
----@return CsvView?
+---@return CsvView.View?
 function M.get(bufnr)
   return M._views[bufnr]
 end
@@ -278,5 +278,5 @@ function M.setup()
   })
 end
 
-M.CsvView = CsvView
+M.View = View
 return M
