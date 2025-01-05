@@ -176,6 +176,19 @@ To toggle CSV view with a custom field delimiter, a custom string delimiter and 
 | **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
 | **CsvViewComment**   | link to `Comment`  | used for comment    |
 
+## TODO
+
+- [x] Customizable delimiter character.
+- [x] Ignore comment lines.
+- [ ] Motions and text objects.
+- [ ] Enhanced editing features (e.g., sorting, filtering).
+- [ ] Row, column, and cell change events for integration with other plugins.
+
+### Not planned
+
+- Pre- and post-processing of files, such as reading/writing Excel files.
+- Displaying tables embedded in Markdown as formatted tables.
+
 ## License
 
 This plugin is released under the MIT License
