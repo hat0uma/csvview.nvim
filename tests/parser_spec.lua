@@ -1,3 +1,5 @@
+---@diagnostic disable: await-in-sync
+
 local config = require("csvview.config")
 local p = require("csvview.parser")
 
@@ -33,13 +35,19 @@ describe("parser", function()
     it("should work for line including single quoted comma.", function()
       local single_quote_char = "'"
       local single_quote_char_byte = string.byte(single_quote_char)
-      assert.are.same({ "abc", "de", "'f,g'", "h" }, p._parse_line("abc,de,'f,g',h", delim_byte, single_quote_char_byte))
+      assert.are.same(
+        { "abc", "de", "'f,g'", "h" },
+        p._parse_line("abc,de,'f,g',h", delim_byte, single_quote_char_byte)
+      )
     end)
 
     it("parses tab-delimited lines correctly", function()
-      local delim = "\t"
-      local delim_byte = string.byte(delim)
-      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc\tde\tf\tg\th", delim_byte, quote_char_byte))
+      local delim_tab = "\t"
+      local delim_tab_byte = string.byte(delim_tab)
+      assert.are.same(
+        { "abc", "de", "f", "g", "h" },
+        p._parse_line("abc\tde\tf\tg\th", delim_tab_byte, quote_char_byte)
+      )
     end)
   end)
 
