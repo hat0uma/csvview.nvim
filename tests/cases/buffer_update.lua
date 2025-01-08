@@ -156,6 +156,52 @@ return {
         },
       },
       {
+        name = "renders correctly when a new line is added and it is the first line",
+        lines = {
+          "1,XUMMW7737A,Jane Davis,jane.williams@example.org,1964-03-22",
+          "2,CFLFGKJX4M,John Martinez,emily.davis@example.org,1986-12-28",
+          "3,PHZ9SYAJ23,Alex Davis,jane.brown@example.org,1976-11-06",
+          "4,NS8EQ0MR1A,Jane Martinez,katie.garcia@example.org,2000-10-18",
+        },
+        changes = {
+          {
+            type = "insert",
+            line = 1,
+            after = "Index,ID,Name,Email,Birthday",
+          },
+        },
+        expected = {
+          "Index  ,ID          ,Name           ,Email                      ,Birthday    ",
+          "      1,XUMMW7737A  ,Jane Davis     ,jane.williams@example.org  ,1964-03-22  ",
+          "      2,CFLFGKJX4M  ,John Martinez  ,emily.davis@example.org    ,1986-12-28  ",
+          "      3,PHZ9SYAJ23  ,Alex Davis     ,jane.brown@example.org     ,1976-11-06  ",
+          "      4,NS8EQ0MR1A  ,Jane Martinez  ,katie.garcia@example.org   ,2000-10-18  ",
+        },
+      },
+      {
+        name = "renders correctly when a new line is added and it is the last line",
+        lines = {
+          "Index,ID,Name,Email,Birthday",
+          "1,XUMMW7737A,Jane Davis,jane.williams@example.org,1964-03-22",
+          "2,CFLFGKJX4M,John Martinez,emily.davis@example.org,1986-12-28",
+          "3,PHZ9SYAJ23,Alex Davis,jane.brown@example.org,1976-11-06",
+        },
+        changes = {
+          {
+            type = "insert",
+            line = 5,
+            after = "4,NS8EQ0MR1A,Jane Martinez,katie.garcia@example.org,2000-10-18",
+          },
+        },
+        expected = {
+          "Index  ,ID          ,Name           ,Email                      ,Birthday    ",
+          "      1,XUMMW7737A  ,Jane Davis     ,jane.williams@example.org  ,1964-03-22  ",
+          "      2,CFLFGKJX4M  ,John Martinez  ,emily.davis@example.org    ,1986-12-28  ",
+          "      3,PHZ9SYAJ23  ,Alex Davis     ,jane.brown@example.org     ,1976-11-06  ",
+          "      4,NS8EQ0MR1A  ,Jane Martinez  ,katie.garcia@example.org   ,2000-10-18  ",
+        },
+      },
+      {
         name = "renders correctly when a line is removed and column width shrinks",
         lines = {
           "Index,ID,Name,Email,Birthday",
@@ -173,6 +219,46 @@ return {
           "      2,CFLFGKJX4M  ,John Martinez  ,emily.davis@example.org   ,1986-12-28  ",
           "      3,PHZ9SYAJ23  ,Alex Davis     ,jane.brown@example.org    ,1976-11-06  ",
           "      4,NS8EQ0MR1A  ,Jane Martinez  ,katie.garcia@example.org  ,2000-10-18  ",
+        },
+      },
+      {
+        name = "renders correctly when a line is removed and it is the first line",
+        lines = {
+          "Index,ID,Name,Email,Birthday",
+          "1,XUMMW7737A,Jane Davis,jane.williams@example.org,1964-03-22",
+          "2,CFLFGKJX4M,John Martinez,emily.davis@example.org,1986-12-28",
+          "3,PHZ9SYAJ23,Alex Davis,jane.brown@example.org,1976-11-06",
+          "4,NS8EQ0MR1A,Jane Martinez,katie.garcia@example.org,2000-10-18",
+        },
+        changes = { {
+          type = "delete",
+          line = 1,
+        } },
+        expected = {
+          "      1,XUMMW7737A  ,Jane Davis     ,jane.williams@example.org  ,1964-03-22  ",
+          "      2,CFLFGKJX4M  ,John Martinez  ,emily.davis@example.org    ,1986-12-28  ",
+          "      3,PHZ9SYAJ23  ,Alex Davis     ,jane.brown@example.org     ,1976-11-06  ",
+          "      4,NS8EQ0MR1A  ,Jane Martinez  ,katie.garcia@example.org   ,2000-10-18  ",
+        },
+      },
+      {
+        name = "renders correctly when a line is removed and it is the last line",
+        lines = {
+          "Index,ID,Name,Email,Birthday",
+          "1,XUMMW7737A,Jane Davis,jane.williams@example.org,1964-03-22",
+          "2,CFLFGKJX4M,John Martinez,emily.davis@example.org,1986-12-28",
+          "3,PHZ9SYAJ23,Alex Davis,jane.brown@example.org,1976-11-06",
+          "4,NS8EQ0MR1A,Jane Martinez,katie.garcia@example.org,2000-10-18",
+        },
+        changes = { {
+          type = "delete",
+          line = 5,
+        } },
+        expected = {
+          "Index  ,ID          ,Name           ,Email                      ,Birthday    ",
+          "      1,XUMMW7737A  ,Jane Davis     ,jane.williams@example.org  ,1964-03-22  ",
+          "      2,CFLFGKJX4M  ,John Martinez  ,emily.davis@example.org    ,1986-12-28  ",
+          "      3,PHZ9SYAJ23  ,Alex Davis     ,jane.brown@example.org     ,1976-11-06  ",
         },
       },
       {

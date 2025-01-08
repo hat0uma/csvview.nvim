@@ -80,9 +80,9 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   -- print("update", first, prev_last, last)
   local delta = last - prev_last
   if delta > 0 then
-    self:_add_row_placeholders(prev_last, delta)
+    self:_add_row_placeholders(prev_last + 1, delta)
   elseif delta < 0 then
-    self:_remove_rows(last, math.abs(delta))
+    self:_remove_rows(last + 1, math.abs(delta))
     self:_mark_recalculation_on_delete(prev_last, last, recalculate_columns)
   end
 
@@ -254,20 +254,28 @@ function CsvViewMetrics:_ensure_column(col_idx)
 end
 
 --- Add row placeholders
----@param prev_last integer
+---@param start integer
 ---@param num integer
-function CsvViewMetrics:_add_row_placeholders(prev_last, num)
-  for _ = 1, num do
-    table.insert(self.rows, prev_last + 1, { fields = {} })
+function CsvViewMetrics:_add_row_placeholders(start, num)
+  -- `table.insert` is inefficient when editing large buffers
+  local len = #self.rows
+  for i = len, start, -1 do
+    self.rows[i + num] = self.rows[i]
+  end
+  for i = start, start + num - 1 do
+    self.rows[i] = { fields = {} }
   end
 end
 
 --- Remove rows
----@param last integer
+---@param start integer
 ---@param num integer
-function CsvViewMetrics:_remove_rows(last, num)
-  for _ = 1, num do
-    table.remove(self.rows, last + 1)
+function CsvViewMetrics:_remove_rows(start, num)
+  -- `table.remove` is inefficient when editing large buffers
+  local len = #self.rows
+  for i = start, len do
+    self.rows[i] = self.rows[i + num]
+    self.rows[i + num] = nil
   end
 end
 
