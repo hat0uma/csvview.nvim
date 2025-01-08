@@ -1,5 +1,5 @@
 local M = {}
-local util = require("csvview.util")
+local errors = require("csvview.errors")
 
 ---@class Csvview.Parser.Callbacks
 ---@field on_line fun(lnum:integer,is_comment:boolean,fields:string[]) the callback to be called for each line
@@ -145,9 +145,9 @@ local function iter(startlnum, endlnum, bufnr, opts, cb)
   -- iterate lines
   local parsed_num = 0
   for i = startlnum, endlnum do
-    local ok, err = xpcall(parse_line, util.wrap_stacktrace, i)
+    local ok, err = xpcall(parse_line, errors.wrap_stacktrace, i)
     if not ok then
-      util.error_with_context(err, { lnum = i })
+      errors.error_with_context(err, { lnum = i })
     end
 
     -- yield every chunksize
@@ -178,16 +178,16 @@ function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
 
   -- create coroutine to iterate lines
   local co = coroutine.create(function() ---@async
-    local ok, err = xpcall(iter, util.wrap_stacktrace, startlnum, endlnum, bufnr, opts, cb)
+    local ok, err = xpcall(iter, errors.wrap_stacktrace, startlnum, endlnum, bufnr, opts, cb)
     if not ok then
-      util.error_with_context(err, { startlnum = startlnum, endlnum = endlnum })
+      errors.error_with_context(err, { startlnum = startlnum, endlnum = endlnum })
     end
   end)
 
   local function resume_co()
     local ok, err = coroutine.resume(co)
     if not ok then
-      util.print_structured_error("CsvView Error parsing buffer", err)
+      errors.print_structured_error("CsvView Error parsing buffer", err)
     elseif coroutine.status(co) ~= "dead" then
       vim.schedule(resume_co)
     end
