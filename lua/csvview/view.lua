@@ -1,5 +1,5 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
-local util = require("csvview.util")
+local errors = require("csvview.errors")
 
 --- Get end column of line
 ---@param winid integer window id
@@ -11,25 +11,29 @@ local function end_col(winid, lnum)
 end
 
 --- @class CsvView.View
---- @field bufnr integer
---- @field metrics CsvView.Metrics
---- @field extmarks integer[]
---- @field opts CsvView.Options
+--- @field public bufnr integer
+--- @field public metrics CsvView.Metrics
+--- @field public opts CsvView.Options
+--- @field private _extmarks integer[]
+--- @field private _on_dispose function?
+--- @field private _locked boolean
 local View = {}
 
 --- create new view
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
 ---@param opts CsvView.Options
+---@param on_dispose? fun()
 ---@return CsvView.View
-function View:new(bufnr, metrics, opts)
+function View:new(bufnr, metrics, opts, on_dispose)
   self.__index = self
 
   local obj = {}
   obj.bufnr = bufnr
   obj.metrics = metrics
-  obj.extmarks = {}
   obj.opts = opts
+  obj._extmarks = {}
+  obj._on_dispose = on_dispose
   return setmetatable(obj, self)
 end
 
@@ -41,7 +45,7 @@ end
 ---@param border boolean
 function View:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
-    self.extmarks[#self.extmarks + 1] =
+    self._extmarks[#self._extmarks + 1] =
       vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset + field.len, {
         virt_text = { { string.rep(" ", padding) } },
         virt_text_pos = "inline",
@@ -69,7 +73,7 @@ end
 ---@param border boolean
 function View:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
-    self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+    self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
       virt_text = { { string.rep(" ", padding) } },
       virt_text_pos = "inline",
       right_gravity = false,
@@ -100,7 +104,7 @@ function View:render_column_index_header(lnum)
       virt[#virt + 1] = { "," }
     end
   end
-  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
     virt_lines = { virt },
     virt_lines_above = true,
   })
@@ -110,7 +114,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 function View:_highlight_delimiter(lnum, offset)
-  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     hl_group = "CsvViewDelimiter",
     end_col = offset + 1,
   })
@@ -120,7 +124,7 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 function View:_render_border(lnum, offset)
-  self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     virt_text = { { "│", "CsvViewDelimiter" } },
     virt_text_pos = "overlay",
   })
@@ -128,9 +132,16 @@ end
 
 --- clear view
 function View:clear()
-  for _ = 1, #self.extmarks do
-    local id = table.remove(self.extmarks)
+  for _ = 1, #self._extmarks do
+    local id = table.remove(self._extmarks)
     vim.api.nvim_buf_del_extmark(self.bufnr, EXTMARK_NS, id)
+  end
+end
+
+function View:dispose()
+  self:clear()
+  if self._on_dispose then
+    self._on_dispose()
   end
 end
 
@@ -167,7 +178,7 @@ function View:_render_line(lnum, winid)
 
   if line.is_comment then
     -- highlight comment line
-    self.extmarks[#self.extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
+    self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
       hl_group = "CsvViewComment",
       end_col = end_col(winid, lnum),
     })
@@ -177,9 +188,9 @@ function View:_render_line(lnum, winid)
   -- render fields
   local offset = 0
   for column_index, field in ipairs(line.fields) do
-    local ok, err = xpcall(self._render_field, util.wrap_stacktrace, self, lnum, column_index, field, offset)
+    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field, offset)
     if not ok then
-      util.error_with_context(err, { lnum = lnum, column_index = column_index })
+      errors.error_with_context(err, { lnum = lnum, column_index = column_index })
     end
     offset = offset + field.len + 1
   end
@@ -194,11 +205,27 @@ function View:render(top_lnum, bot_lnum, winid)
 
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
-    local ok, err = xpcall(self._render_line, util.wrap_stacktrace, self, lnum, winid)
+    local ok, err = xpcall(self._render_line, errors.wrap_stacktrace, self, lnum, winid)
     if not ok then
-      util.error_with_context(err, { lnum = lnum })
+      errors.error_with_context(err, { lnum = lnum })
     end
   end
+end
+
+--- Lock view rendering
+function View:lock()
+  self._locked = true
+end
+
+--- Unlock view rendering
+function View:unlock()
+  self._locked = false
+end
+
+--- check if view rendering is locked
+---@return boolean
+function View:is_locked()
+  return self._locked
 end
 
 -------------------------------------------------------
@@ -212,14 +239,13 @@ M._views = {}
 
 --- attach view for buffer
 ---@param bufnr integer
----@param metrics CsvView.Metrics
----@param opts CsvView.Options
-function M.attach(bufnr, metrics, opts)
+---@param view CsvView.View
+function M.attach(bufnr, view)
   if M._views[bufnr] then
     vim.notify("csvview: already attached for this buffer.")
     return
   end
-  M._views[bufnr] = View:new(bufnr, metrics, opts)
+  M._views[bufnr] = view
   vim.cmd([[redraw!]])
 end
 
@@ -229,8 +255,7 @@ function M.detach(bufnr)
   if not M._views[bufnr] then
     return
   end
-  M._views[bufnr]:clear()
-  M._views[bufnr].metrics:clear()
+  M._views[bufnr]:dispose()
   M._views[bufnr] = nil
 end
 
@@ -261,15 +286,20 @@ function M.setup()
       --   return false
       -- end
 
+      -- do not render when locked
+      if view:is_locked() then
+        return false
+      end
+
       -- clear last rendered.
       view:clear()
 
       -- render with current window range.
       local top = vim.fn.line("w0", winid)
       local bot = vim.fn.line("w$", winid)
-      local ok, err = xpcall(view.render, util.wrap_stacktrace, view, top, bot, winid)
+      local ok, err = xpcall(view.render, errors.wrap_stacktrace, view, top, bot, winid)
       if not ok then
-        util.print_structured_error("CsvView Rendering Stopped with Error", err)
+        errors.print_structured_error("CsvView Rendering Stopped with Error", err)
         M.detach(bufnr)
       end
 

@@ -1,15 +1,20 @@
 local M = {}
 
+local CsvView = require("csvview.view").View
+local get_view = require("csvview.view").get
+local attach_view = require("csvview.view").attach
+local detach_view = require("csvview.view").detach
+local setup_view = require("csvview.view").setup
+
 local CsvViewMetrics = require("csvview.metrics")
-local buffer_event = require("csvview.buffer_event")
+local buf = require("csvview.buf")
 local config = require("csvview.config")
-local view = require("csvview.view")
 
 --- check if csv table view is enabled
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  return view.get(bufnr) ~= nil
+  return get_view(bufnr) ~= nil
 end
 
 --- enable csv table view
@@ -24,37 +29,32 @@ function M.enable(bufnr, opts)
     return
   end
 
-  -- Calculate metrics and attach view.
+  local detach_bufevent_handle --- @type fun()
   local metrics = CsvViewMetrics:new(bufnr, opts)
-  metrics:compute_buffer(function()
-    view.attach(bufnr, metrics, opts)
+  local view = CsvView:new(bufnr, metrics, opts, function()
+    detach_bufevent_handle()
+    metrics:clear()
   end)
 
-  -- Register buffer events.
-  buffer_event.register(bufnr, {
+  -- Register buffer-update events.
+  detach_bufevent_handle = buf.attach(bufnr, {
     on_lines = function(_, _, _, first, last, last_updated)
-      -- detach if disabled
-      if not M.is_enabled(bufnr) then
-        return true
-      end
-
-      -- Recalculate only the difference.
       metrics:update(first, last, last_updated)
     end,
-
     on_reload = function()
-      -- detach if disabled
-      if not M.is_enabled(bufnr) then
-        return true
-      end
-
-      -- Recalculate all fields.
-      view.detach(bufnr)
+      view:clear()
+      metrics:clear()
+      view:lock()
       metrics:compute_buffer(function()
-        view.attach(bufnr, metrics, opts)
+        view:unlock()
       end)
     end,
   })
+
+  -- Calculate metrics and attach view.
+  metrics:compute_buffer(function()
+    attach_view(bufnr, view)
+  end)
 end
 
 --- disable csv table view
@@ -66,9 +66,7 @@ function M.disable(bufnr)
     return
   end
 
-  -- Unregister buffer events and detach view.
-  buffer_event.unregister(bufnr)
-  view.detach(bufnr)
+  detach_view(bufnr)
 end
 
 --- toggle csv table view
@@ -87,7 +85,7 @@ end
 ---@param opts CsvView.Options?
 function M.setup(opts)
   config.setup(opts)
-  view.setup()
+  setup_view()
 end
 
 return M
