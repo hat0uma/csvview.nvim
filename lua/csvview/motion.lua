@@ -308,7 +308,7 @@ function M.jump_to_prev_end_of_field(bufnr)
   if cursor.kind == "field" then
     local charlen = vim.fn.charidx(cursor.text, #cursor.text)
     local col_increases = {
-      start = charlen == 1 and -1 or 0,
+      start = -1,
       inside = -1,
       ["end"] = -1,
       delimiter = #cursor.text == 0 and -1 or 0,
