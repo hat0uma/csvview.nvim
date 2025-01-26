@@ -53,14 +53,14 @@ local cases = {
   },
 }
 
-describe("csvview.textobject", function()
+describe("textobject", function()
   before_each(function()
     config.setup()
     csvview.setup()
   end)
 
   for _, case in ipairs(cases) do
-    it(case.name, function()
+    it(string.format("field %s", case.name), function()
       local bufnr = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.api.nvim_win_set_buf(0, bufnr)
