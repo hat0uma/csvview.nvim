@@ -169,6 +169,28 @@ To toggle CSV view with a custom field delimiter, a custom string delimiter and 
 - `require('csvview').toggle()`: Toggle CSV view.
 - `require('csvview').is_enabled()`: Check if CSV view is enabled.
 
+## Events
+
+This plugin provides the following events:
+
+- `CsvViewAttach`: Triggered after the initial metrics calculation is completed and the CsvView is attached.
+- `CsvViewDetach`: Triggered after the CsvView is detached.
+
+### Example
+
+You can hook into these events as follows:
+
+```lua
+local group = vim.api.nvim_create_augroup("CsvViewEvents", {})
+vim.api.nvim_create_autocmd("User", {
+  pattern = "CsvViewAttach",
+  group = group,
+  callback = function()
+    print("CsvView is attached")
+  end,
+})
+```
+
 ## Highlights
 
 | Group                | Default            | Description         |

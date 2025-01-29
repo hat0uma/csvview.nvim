@@ -31,9 +31,10 @@ function M.enable(bufnr, opts)
 
   local detach_bufevent_handle --- @type fun()
   local metrics = CsvViewMetrics:new(bufnr, opts)
-  local view = CsvView:new(bufnr, metrics, opts, function()
+  local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
     detach_bufevent_handle()
     metrics:clear()
+    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach" })
   end)
 
   -- Register buffer-update events.
@@ -54,6 +55,7 @@ function M.enable(bufnr, opts)
   -- Calculate metrics and attach view.
   metrics:compute_buffer(function()
     attach_view(bufnr, view)
+    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach" })
   end)
 end
 
