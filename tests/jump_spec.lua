@@ -1,7 +1,7 @@
 ---@diagnostic disable: await-in-sync
 local config = require("csvview.config")
 local csvview = require("csvview")
-local motion = require("csvview.motion")
+local jump = require("csvview.jump")
 
 ---@type CsvView.Options
 local opts = { parser = { comments = { "#" } } }
@@ -101,25 +101,25 @@ local helpers_case = {
     name = "cursor is in the middle of the field",
     cursor = { row = 2, col = 4 },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 2, 3 },
         anchor = "start",
         text = "Jane Davis",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 2 },
         anchor = "start",
         text = "XUMMW7737A",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 2, 2 },
         anchor = "end",
         text = "XUMMW7737A",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 1 },
         anchor = "start",
@@ -131,25 +131,25 @@ local helpers_case = {
     name = "cursor is at the start of the field",
     cursor = { row = 2, col = 2 },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 2, 3 },
         anchor = "start",
         text = "Jane Davis",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 1 },
         anchor = "start",
         text = "1",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 2, 2 },
         anchor = "end",
         text = "XUMMW7737A",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 1 },
         anchor = "start",
@@ -161,25 +161,25 @@ local helpers_case = {
     name = "cursor is at the end of the field",
     cursor = { row = 2, col = string.len(lines[2]) },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "start",
         text = "last line",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 5 },
         anchor = "start",
         text = "1964-03-22",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "end",
         text = "last line",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 4 },
         anchor = "end",
@@ -191,25 +191,25 @@ local helpers_case = {
     name = "cursor is at the delimiter",
     cursor = { row = 2, col = 1 },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 2, 2 },
         anchor = "start",
         text = "XUMMW7737A",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 1 },
         anchor = "start",
         text = "1",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 2, 2 },
         anchor = "end",
         text = "XUMMW7737A",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 1 },
         anchor = "start",
@@ -221,25 +221,25 @@ local helpers_case = {
     name = "cursor is at comment line",
     cursor = { row = 3, col = 0 },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "start",
         text = "last line",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 5 },
         anchor = "start",
         text = "1964-03-22",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "end",
         text = "last line",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 5 },
         anchor = "end",
@@ -251,25 +251,25 @@ local helpers_case = {
     name = "cursor is at empty line",
     cursor = { row = 4, col = 0 },
     expected_csv_cursor = {
-      jump_to_next_start_of_field = {
+      next_field_start = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "start",
         text = "last line",
       },
-      jump_to_prev_start_of_field = {
+      prev_field_start = {
         kind = "field",
         pos = { 2, 5 },
         anchor = "start",
         text = "1964-03-22",
       },
-      jump_to_next_end_of_field = {
+      next_field_end = {
         kind = "field",
         pos = { 5, 1 },
         anchor = "end",
         text = "last line",
       },
-      jump_to_prev_end_of_field = {
+      prev_field_end = {
         kind = "field",
         pos = { 2, 5 },
         anchor = "end",
@@ -296,7 +296,7 @@ describe("motion", function()
 
         -- Move cursor to the specified field
         vim.api.nvim_win_set_cursor(0, { case.cursor.row, case.cursor.col })
-        motion.jump(bufnr, case.opts)
+        jump.field(bufnr, case.opts)
 
         -- Get the new cursor position
         local csv_cursor = require("csvview.util").get_cursor(bufnr)
@@ -306,10 +306,10 @@ describe("motion", function()
   end)
 
   local func_names = {
-    "jump_to_next_start_of_field",
-    "jump_to_prev_start_of_field",
-    "jump_to_next_end_of_field",
-    "jump_to_prev_end_of_field",
+    "next_field_start",
+    "prev_field_start",
+    "next_field_end",
+    "prev_field_end",
   }
 
   for _, func_name in ipairs(func_names) do
@@ -325,7 +325,7 @@ describe("motion", function()
         -- Move cursor to the specified field
         vim.api.nvim_win_set_cursor(0, { helpers_case[i].cursor.row, helpers_case[i].cursor.col })
 
-        motion[func_name](bufnr)
+        jump[func_name](bufnr)
         -- Get the new cursor position
         local csv_cursor = require("csvview.util").get_cursor(bufnr)
         assert.are.same(helpers_case[i].expected_csv_cursor[func_name], csv_cursor)

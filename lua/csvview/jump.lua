@@ -175,14 +175,16 @@ end
 --- - `"absolute"`: interprets `pos` as absolute row and column numbers (1-based).
 ---
 --- (default: `"relative"`).
---- @field mode? "relative" | "absolute"
+--- @alias CsvView.JumpMode "relative" | "absolute"
+--- @field mode? CsvView.JumpMode
 ---
 --- Determines where the cursor will be placed within the target field.
 --- - `"start"`: places the cursor at the beginning of the field.
 --- - `"end"`: places the cursor at the end of the field.
 ---
 --- (default: `"start"`).
---- @field anchor? "start" | "end"
+--- @alias CsvView.JumpAnchor "start" | "end"
+--- @field anchor? CsvView.JumpAnchor
 ---
 --- If `true`, wraps around columns when moving beyond the last column
 --- (or before the first column if using negative offsets).
@@ -216,7 +218,7 @@ end
 --- ```
 ---@param bufnr? integer
 ---@param opts? CsvView.JumpOpts
-function M.jump(bufnr, opts)
+function M.field(bufnr, opts)
   bufnr = buf.resolve_bufnr(bufnr)
 
   -- Set default options
@@ -277,7 +279,7 @@ end
 --- Moves the cursor to the next end of the field
 --- like `e` motion in normal mode.
 ---@param bufnr integer?
-function M.jump_to_next_end_of_field(bufnr)
+function M.next_field_end(bufnr)
   local cursor = util.get_cursor(bufnr)
 
   local opts = { anchor = "end" } ---@type CsvView.JumpOpts
@@ -295,13 +297,13 @@ function M.jump_to_next_end_of_field(bufnr)
   end
 
   -- jump to the end of the previous field
-  M.jump(bufnr, opts)
+  M.field(bufnr, opts)
 end
 
 --- Moves the cursor to the previous end of the field.
 --- like `ge` motion in normal mode.
 --- @param bufnr integer?
-function M.jump_to_prev_end_of_field(bufnr)
+function M.prev_field_end(bufnr)
   local cursor = util.get_cursor(bufnr)
 
   local opts = { anchor = "end" } ---@type CsvView.JumpOpts
@@ -319,20 +321,20 @@ function M.jump_to_prev_end_of_field(bufnr)
   end
 
   -- jump to the end of the previous field
-  M.jump(bufnr, opts)
+  M.field(bufnr, opts)
 end
 
 --- Moves the cursor to the next start of the field.
 --- like `w` motion in normal mode.
 --- @param bufnr integer?
-function M.jump_to_next_start_of_field(bufnr)
-  M.jump(bufnr, { pos = { 0, 1 }, anchor = "start" })
+function M.next_field_start(bufnr)
+  M.field(bufnr, { pos = { 0, 1 }, anchor = "start" })
 end
 
 --- Moves the cursor to the previous start of the field.
 --- like `b` motion in normal mode.
 --- @param bufnr integer?
-function M.jump_to_prev_start_of_field(bufnr)
+function M.prev_field_start(bufnr)
   local cursor = util.get_cursor(bufnr)
 
   local opts = { anchor = "start" } ---@type CsvView.JumpOpts
@@ -349,7 +351,7 @@ function M.jump_to_prev_start_of_field(bufnr)
   end
 
   -- jump to the end of the previous field
-  M.jump(bufnr, opts)
+  M.field(bufnr, opts)
 end
 
 return M

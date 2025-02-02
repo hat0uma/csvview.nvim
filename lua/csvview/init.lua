@@ -9,6 +9,7 @@ local setup_view = require("csvview.view").setup
 local CsvViewMetrics = require("csvview.metrics")
 local buf = require("csvview.buf")
 local config = require("csvview.config")
+local keymap = require("csvview.keymap")
 
 --- check if csv table view is enabled
 ---@param bufnr integer
@@ -34,6 +35,7 @@ function M.enable(bufnr, opts)
   local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
     detach_bufevent_handle()
     metrics:clear()
+    keymap.unregister(opts)
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach" })
   end)
 
@@ -55,6 +57,7 @@ function M.enable(bufnr, opts)
   -- Calculate metrics and attach view.
   metrics:compute_buffer(function()
     attach_view(bufnr, view)
+    keymap.register(opts)
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach" })
   end)
 end
