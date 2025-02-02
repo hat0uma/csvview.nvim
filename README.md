@@ -1,20 +1,20 @@
 # csvview.nvim
 
-`csvview.nvim` is a lightweight CSV file viewer plugin for Neovim.
-With this plugin, you can easily view and edit CSV files within Neovim.
+A comfortable CSV/TSV editing plugin for Neovim.
 
 ![csvview](https://github.com/hat0uma/csvview.nvim/assets/55551571/27130f41-98f5-445d-a9eb-643b31e0b96b)
 
-## Features
+## ✨ Features
 
-- Displays the CSV/TSV file in a tabular format using virtual text.
-- Dynamically updates the CSV view as you edit, ensuring a seamless editing experience.
-- Asynchronous parsing enables comfortable handling of large CSV files.
-- Can ignore comment lines when displaying the CSV file.
-- Supports two display modes:
-  - `highlight`: Highlights the delimiter.
-  - `border`: Displays the delimiter with `│`.
-- Customizable delimiter character and comment prefix.
+- **Tabular Display**: Displays CSV/TSV files in a virtual text table.
+- **Dynamic Updates**: Automatically refreshes the table as you edit.
+- **Asynchronous Parsing**: Smoothly handles large CSV files without blocking.
+- **Text Objects & Motions**: Conveniently select fields or move across fields/rows.
+- **Comment Ignoring**: Skips specified comment lines from the table display.
+- **Flexible Settings**: Customizable delimiter and comment prefix.
+- **Two Display Modes**:
+  - `highlight`: Highlights delimiters.
+  - `border`: Uses a vertical border (`│`) as delimiters.
 
 <table>
   <tr>
@@ -30,11 +30,11 @@ With this plugin, you can easily view and edit CSV files within Neovim.
   </tr>
 </table>
 
-## Requirements
+## ⚡ Requirements
 
 Neovim v0.10 or newer is required.
 
-## Installation
+## 📦 Installation
 
 Install the plugin using your favorite package manager.
 
@@ -72,7 +72,7 @@ Plug 'hat0uma/csvview.nvim'
 lua require('csvview').setup()
 ```
 
-## Configuration
+## 🛠️  Configuration
 
 `csvview.nvim` are highly customizable, Please refer to the following default settings.
 
@@ -246,7 +246,7 @@ lua require('csvview').setup()
 
 </details>
 
-## Usage
+## 🚀 Usage
 
 After opening a CSV file, use the following commands to interact with the plugin:
 
@@ -274,7 +274,7 @@ To toggle CSV view with a custom field delimiter, a custom string delimiter and 
 
 ### Lua API
 
-Below are the core Lua functions that you can call programmatically.
+Below are the core Lua functions that you can call programmatically. If you want to map these functions to key bindings, you can use the `opts.keymaps` option.
 
 #### Basic Functions
 
@@ -361,14 +361,14 @@ vim.api.nvim_create_autocmd("User", {
 })
 ```
 
-## Highlights
+## 🌈 Highlights
 
 | Group                | Default            | Description         |
 | -------------------- | ------------------ | ------------------- |
 | **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
 | **CsvViewComment**   | link to `Comment`  | used for comment    |
 
-## TODO
+## 📝 TODO
 
 - [x] Customizable delimiter character.
 - [x] Ignore comment lines.
@@ -381,6 +381,10 @@ vim.api.nvim_create_autocmd("User", {
 - Pre- and post-processing of files, such as reading/writing Excel files.
 - Displaying tables embedded in Markdown as formatted tables.
 
-## License
+## 🤝 Contributing
 
-This plugin is released under the MIT License
+Contributions are welcome! Please open an issue or submit a pull request on GitHub.
+
+## 📄 License
+
+Distributed under the MIT License.
