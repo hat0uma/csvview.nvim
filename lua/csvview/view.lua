@@ -13,7 +13,7 @@ end
 --- @class CsvView.View
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
---- @field public opts CsvView.Options
+--- @field public opts CsvView.InternalOptions
 --- @field private _extmarks integer[]
 --- @field private _on_dispose function?
 --- @field private _locked boolean
@@ -22,7 +22,7 @@ local View = {}
 --- create new view
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@param on_dispose? fun()
 ---@return CsvView.View
 function View:new(bufnr, metrics, opts, on_dispose)

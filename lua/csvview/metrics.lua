@@ -6,7 +6,7 @@ local nop = function() end
 --- @field public rows CsvView.Metrics.Row[]
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
---- @field private _opts CsvView.Options
+--- @field private _opts CsvView.InternalOptions
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -24,7 +24,7 @@ local CsvViewMetrics = {}
 
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@return CsvView.Metrics
 function CsvViewMetrics:new(bufnr, opts)
   self.__index = self
@@ -88,6 +88,82 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
 
   -- update metrics
   self:_compute_metrics(first + 1, last, recalculate_columns, on_end)
+end
+
+--- Checks if the row index is valid.
+---@param row_idx integer
+---@return boolean
+function CsvViewMetrics:is_valid_row(row_idx)
+  return row_idx >= 1 and row_idx <= #self.rows
+end
+
+--- Checks if the column is empty.
+---@param row_idx integer
+---@param col_idx integer
+---@return boolean
+function CsvViewMetrics:is_empty_field(row_idx, col_idx)
+  return self.rows[row_idx].fields[col_idx].len == 0
+end
+
+--- Checks if the cursor is at the last column of the row.
+---@param row_idx integer
+---@param col_idx integer
+---@return boolean
+function CsvViewMetrics:is_last_col(row_idx, col_idx)
+  return col_idx == #self.rows[row_idx].fields
+end
+
+--- Get byte offset from column index
+---@param row_idx integer row index(1-indexed)
+---@param col_idx integer column index(1-indexed)
+---@return integer offset field offset in bytes
+---@return integer len field length in bytes
+function CsvViewMetrics:col_idx_to_byte(row_idx, col_idx)
+  local row = self.rows[row_idx]
+  if not row then
+    error(string.format("Row out of bounds row_idx=%d", row_idx))
+  end
+  if row.is_comment then
+    error(string.format("Row is a comment row_idx=%d", row_idx))
+  end
+  if col_idx > #row.fields then
+    error(string.format("Column out of bounds row_idx=%d col_idx=%d", row_idx, col_idx))
+  end
+
+  local offset = 0
+  for i = 1, col_idx - 1 do
+    offset = offset + row.fields[i].len + 1 -- Add 1 for the delimiter
+  end
+  return offset, row.fields[col_idx] and row.fields[col_idx].len or 0
+end
+
+--- Get column index from byte position
+---@param row_idx integer row index(1-indexed)
+---@param byte integer byte position in the row
+---@return integer col_idx 1-indexed column index
+---@return integer offset byte offset of the column
+function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
+  local row = self.rows[row_idx]
+  if not row then
+    error("Row out of bounds row_idx=" .. row_idx)
+  end
+  if row.is_comment then
+    error("Row is a comment row_idx=" .. row_idx)
+  end
+
+  if #row.fields == 0 then
+    error("Row has no fields row_idx=" .. row_idx)
+  end
+
+  local offset = 0
+  for i, field in ipairs(row.fields) do
+    if byte < (offset + field.len + 1) then
+      return i, offset
+    end
+    offset = offset + field.len + 1
+  end
+
+  return #row.fields, offset
 end
 
 --- Compute metrics

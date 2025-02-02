@@ -1,6 +1,39 @@
 local M = {}
 
+---@class CsvView.Options.Parser
+---@field async_chunksize? integer
+---@field delimiter? CsvView.Options.Parser.Delimiter
+---@field quote_char? string
+---@field comments? string[]
+---@alias CsvView.Options.Parser.Delimiter string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+
+---@class CsvView.Options.View
+---@field min_column_width? integer
+---@field spacing? integer
+---@field display_mode? CsvView.Options.View.DisplayMode
+---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
+
+---@class CsvView.Options.Keymaps
+---@field textobject_field_inner? CsvView.Keymap
+---@field textobject_field_outer? CsvView.Keymap
+---@field jump_next_field_start? CsvView.Keymap
+---@field jump_prev_field_start? CsvView.Keymap
+---@field jump_next_field_end? CsvView.Keymap
+---@field jump_prev_field_end? CsvView.Keymap
+---@field jump_next_row? CsvView.Keymap
+---@field jump_prev_row? CsvView.Keymap
+---@field [string] CsvView.Keymap
+---@field [number] CsvView.Keymap
+
+---@alias CsvView.Options.Actions table<string, CsvView.Action>
+
 --- @class CsvView.Options
+--- @field parser? CsvView.Options.Parser
+--- @field view? CsvView.Options.View
+--- @field keymaps? CsvView.Options.Keymaps
+--- @field actions? table<string, CsvView.Action>
+
+--- @class CsvView.InternalOptions
 M.defaults = {
   parser = {
     --- The number of lines that the asynchronous parser processes per cycle.
@@ -20,7 +53,7 @@ M.defaults = {
     ---      tsv = "\t",
     ---    },
     ---  }
-    --- @type string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+    --- @type CsvView.Options.Parser.Delimiter
     delimiter = {
       default = ",",
       ft = {
@@ -63,16 +96,112 @@ M.defaults = {
     --- The display method of the delimiter
     --- "highlight" highlights the delimiter
     --- "border" displays the delimiter with `│`
-    ---@type "highlight" | "border"
+    ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
+  },
+
+  --- Keymaps for csvview.
+  --- These mappings are only active when csvview is enabled.
+  --- You can assign key mappings to each action defined in `opts.actions`.
+  --- For example:
+  --- ```lua
+  --- keymaps = {
+  ---   -- Text objects for selecting fields
+  ---   textobject_field_inner = { "if", mode = { "o", "x" } },
+  ---   textobject_field_outer = { "af", mode = { "o", "x" } },
+  ---
+  ---   -- Excel-like navigation:
+  ---   -- Use <Tab> and <S-Tab> to move horizontally between fields.
+  ---   -- Use <Enter> and <S-Enter> to move vertically between rows.
+  ---   -- Note: In terminals, you may need to enable CSI-u mode to use <S-Tab> and <S-Enter>.
+  ---   jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+  ---   jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
+  ---   jump_next_row = { "<Enter>", mode = { "n", "v" } },
+  ---   jump_prev_row = { "<S-Enter>", mode = { "n", "v" } },
+  ---
+  ---   -- Custom key mapping example:
+  ---   { "<leader>h", function() print("hello") end, mode = "n" },
+  --- }
+  --- ```
+  --- @type CsvView.Options.Keymaps
+  keymaps = {},
+
+  --- Actions for keymaps.
+  ---@type CsvView.Options.Actions
+  actions = {
+    textobject_field_inner = {
+      function()
+        require("csvview.textobject").field(0, { include_delimiter = false })
+      end,
+      desc = "[csvview] Select the current field",
+      noremap = true,
+      silent = true,
+    },
+    textobject_field_outer = {
+      function()
+        require("csvview.textobject").field(0, { include_delimiter = true })
+      end,
+      desc = "[csvview] Select the current field with delimiter",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_field_start = {
+      function()
+        require("csvview.jump").next_field_start()
+      end,
+      desc = "[csvview] Jump to the next start of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_field_start = {
+      function()
+        require("csvview.jump").prev_field_start()
+      end,
+      desc = "[csvview] Jump to the previous start of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_field_end = {
+      function()
+        require("csvview.jump").next_field_end()
+      end,
+      desc = "[csvview] Jump to the next end of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_field_end = {
+      function()
+        require("csvview.jump").prev_field_end()
+      end,
+      desc = "[csvview] Jump to the previous end of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_row = {
+      function()
+        require("csvview.jump").field(0, { pos = { 1, 0 }, anchor = "end" })
+      end,
+      desc = "[csvview] Jump to the next row",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_row = {
+      function()
+        require("csvview.jump").field(0, { pos = { -1, 0 }, anchor = "end" })
+      end,
+      desc = "[csvview] Jump to the previous row",
+      noremap = true,
+      silent = true,
+    },
   },
 }
 
+---@diagnostic disable-next-line: missing-fields
 M.options = {}
 
 --- get config
 ---@param opts? CsvView.Options
----@return CsvView.Options
+---@return CsvView.InternalOptions
 function M.get(opts)
   return vim.tbl_deep_extend("force", M.options, opts or {})
 end

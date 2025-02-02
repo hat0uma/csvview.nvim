@@ -12,6 +12,18 @@ function M.resolve_bufnr(bufnr)
   end
 end
 
+--- Get buffer attached window
+---@param bufnr integer
+---@return integer?
+function M.get_win(bufnr)
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+      return winid
+    end
+  end
+  return nil
+end
+
 --- Watch buffer-update events
 ---@param bufnr integer
 ---@param callbacks vim.api.keyset.buf_attach
