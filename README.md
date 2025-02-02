@@ -38,6 +38,33 @@ Neovim v0.10 or newer is required.
 
 Install the plugin using your favorite package manager.
 
+### lazy.nvim
+
+```lua
+{
+  "hat0uma/csvview.nvim",
+  ---@module "csvview"
+  ---@type CsvView.Options
+  opts = {
+    parser = { comments = { "#", "//" } },
+    keymaps = {
+      -- Text objects for selecting fields
+      textobject_field_inner = { "if", mode = { "o", "x" } },
+      textobject_field_outer = { "af", mode = { "o", "x" } },
+      -- Excel-like navigation:
+      -- Use <Tab> and <S-Tab> to move horizontally between fields.
+      -- Use <Enter> and <S-Enter> to move vertically between rows and place the cursor at the end of the field.
+      -- Note: In terminals, you may need to enable CSI-u mode to use <S-Tab> and <S-Enter>.
+      jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+      jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
+      jump_next_row = { "<Enter>", mode = { "n", "v" } },
+      jump_prev_row = { "<S-Enter>", mode = { "n", "v" } },
+    },
+  },
+  cmd = { "CsvViewEnable", "CsvViewDisable", "CsvViewToggle" },
+}
+```
+
 ### vim-plug
 
 ```vim
@@ -45,28 +72,13 @@ Plug 'hat0uma/csvview.nvim'
 lua require('csvview').setup()
 ```
 
-### lazy.nvim
-
-```lua
-{
-  'hat0uma/csvview.nvim',
-  config = function()
-    require('csvview').setup()
-  end
-}
-```
-
 ## Configuration
 
-`csvview.nvim` works with default settings, but you can customize options as follows:
+`csvview.nvim` are highly customizable, Please refer to the following default settings.
 
-```lua
-require('csvview').setup({
-  -- Add your configuration here
-})
-```
+<details>
 
-The configuration options are as follows:
+<summary>Default Settings</summary>
 
 ```lua
 {
@@ -88,7 +100,7 @@ The configuration options are as follows:
     ---      tsv = "\t",
     ---    },
     ---  }
-    --- @type string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+    --- @type CsvView.Options.Parser.Delimiter
     delimiter = {
       default = ",",
       ft = {
@@ -131,12 +143,108 @@ The configuration options are as follows:
     --- The display method of the delimiter
     --- "highlight" highlights the delimiter
     --- "border" displays the delimiter with `│`
-    --- see `Features` section of the README.
-    ---@type "highlight" | "border"
+    ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
+  },
+
+  --- Keymaps for csvview.
+  --- These mappings are only active when csvview is enabled.
+  --- You can assign key mappings to each action defined in `opts.actions`.
+  --- For example:
+  --- ```lua
+  --- keymaps = {
+  ---   -- Text objects for selecting fields
+  ---   textobject_field_inner = { "if", mode = { "o", "x" } },
+  ---   textobject_field_outer = { "af", mode = { "o", "x" } },
+  ---
+  ---   -- Excel-like navigation:
+  ---   -- Use <Tab> and <S-Tab> to move horizontally between fields.
+  ---   -- Use <Enter> and <S-Enter> to move vertically between rows.
+  ---   -- Note: In terminals, you may need to enable CSI-u mode to use <S-Tab> and <S-Enter>.
+  ---   jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+  ---   jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
+  ---   jump_next_row = { "<Enter>", mode = { "n", "v" } },
+  ---   jump_prev_row = { "<S-Enter>", mode = { "n", "v" } },
+  ---
+  ---   -- Custom key mapping example:
+  ---   { "<leader>h", function() print("hello") end, mode = "n" },
+  --- }
+  --- ```
+  --- @type CsvView.Options.Keymaps
+  keymaps = {},
+
+  --- Actions for keymaps.
+  ---@type CsvView.Options.Actions
+  actions = {
+    textobject_field_inner = {
+      function()
+        require("csvview.textobject").field(0, { include_delimiter = false })
+      end,
+      desc = "[csvview] Select the current field",
+      noremap = true,
+      silent = true,
+    },
+    textobject_field_outer = {
+      function()
+        require("csvview.textobject").field(0, { include_delimiter = true })
+      end,
+      desc = "[csvview] Select the current field with delimiter",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_field_start = {
+      function()
+        require("csvview.jump").next_field_start()
+      end,
+      desc = "[csvview] Jump to the next start of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_field_start = {
+      function()
+        require("csvview.jump").prev_field_start()
+      end,
+      desc = "[csvview] Jump to the previous start of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_field_end = {
+      function()
+        require("csvview.jump").next_field_end()
+      end,
+      desc = "[csvview] Jump to the next end of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_field_end = {
+      function()
+        require("csvview.jump").prev_field_end()
+      end,
+      desc = "[csvview] Jump to the previous end of the field",
+      noremap = true,
+      silent = true,
+    },
+    jump_next_row = {
+      function()
+        require("csvview.jump").field(0, { pos = { 1, 0 }, anchor = "end" })
+      end,
+      desc = "[csvview] Jump to the next row",
+      noremap = true,
+      silent = true,
+    },
+    jump_prev_row = {
+      function()
+        require("csvview.jump").field(0, { pos = { -1, 0 }, anchor = "end" })
+      end,
+      desc = "[csvview] Jump to the previous row",
+      noremap = true,
+      silent = true,
+    },
   },
 }
 ```
+
+</details>
 
 ## Usage
 
@@ -144,9 +252,11 @@ After opening a CSV file, use the following commands to interact with the plugin
 
 ### Commands
 
-- `:CsvViewEnable [options]`: Enable CSV view with the specified options.
-- `:CsvViewDisable`: Disable CSV view.
-- `:CsvViewToggle [options]`: Toggle CSV view with the specified options.
+| Command                    | Description                                      |
+|----------------------------|--------------------------------------------------|
+| `:CsvViewEnable [options]` | Enable CSV view with the specified options.      |
+| `:CsvViewDisable`          | Disable CSV view.                                |
+| `:CsvViewToggle [options]` | Toggle CSV view with the specified options.      |
 
 ### Example
 
@@ -164,17 +274,77 @@ To toggle CSV view with a custom field delimiter, a custom string delimiter and 
 
 ### Lua API
 
+Below are the core Lua functions that you can call programmatically.
+
+#### Basic Functions
+
 - `require('csvview').enable()`: Enable CSV view.
 - `require('csvview').disable()`: Disable CSV view.
 - `require('csvview').toggle()`: Toggle CSV view.
 - `require('csvview').is_enabled()`: Check if CSV view is enabled.
 
+#### Jump Motions
+
+You can move across CSV fields and rows with the following API.
+
+```lua
+-- Basic usage:
+require("csvview.jump").field(0, {
+  pos = { 1, 2 },      -- Move to row=1, column=2
+  mode = "absolute",   -- "absolute": interpret `pos` as absolute coords.
+                       -- "relative": interpret `pos` as offset from the current field.
+  anchor = "start",    -- "start": place the cursor at field start, "end" : field end.
+  col_wrap = true,     -- Wrap to the next/previous row when exceeding column bounds.
+})
+```
+
+Shortcuts for common movements:
+
+```lua
+-- Jump to the start of the next field like `w` motion.
+require("csvview.jump").next_field_start(bufnr?)
+-- Jump to the start of the previous field like `b` motion.
+require("csvview.jump").prev_field_start(bufnr?)
+-- Jump to the end of the next field like `e` motion.
+require("csvview.jump").next_field_end(bufnr?)
+-- Jump to the end of the previous field like `ge` motion.
+require("csvview.jump").prev_field_end(bufnr?)
+```
+
+#### Text Objects
+
+For selecting a CSV field via text objects:
+
+```lua
+require("csvview.textobject").field(0, {
+  include_delimiter = false -- Include the delimiter in the selection
+})
+```
+
+#### Cursor Information
+
+Retrieve detailed information about the cursor position:
+
+  ```lua
+  local info = require("csvview.util").get_cursor(bufnr)
+
+  -- info returns:
+  -- {
+  --   kind   = "field" | "comment" | "empty_line",
+  --   pos    = { 1, 2 },    -- 1-based [row, col] csv coordinates
+  --   anchor = "start" | "end" | "inside" | "delimiter", -- The position of the cursor in the field
+  --   text   = "the field content"
+  -- }
+  ```
+
 ## Events
 
 This plugin provides the following events:
 
-- `CsvViewAttach`: Triggered after the initial metrics calculation is completed and the CsvView is attached.
-- `CsvViewDetach`: Triggered after the CsvView is detached.
+| Event            | Description                                                                 |
+|------------------|-----------------------------------------------------------------------------|
+| CsvViewAttach    | Triggered after the initial metrics calculation is completed and the CsvView is attached. |
+| CsvViewDetach    | Triggered after the CsvView is detached.                                    |
 
 ### Example
 
@@ -202,7 +372,7 @@ vim.api.nvim_create_autocmd("User", {
 
 - [x] Customizable delimiter character.
 - [x] Ignore comment lines.
-- [ ] Motions and text objects.
+- [x] Motions and text objects.
 - [ ] Enhanced editing features (e.g., sorting, filtering).
 - [ ] Row, column, and cell change events for integration with other plugins.
 
