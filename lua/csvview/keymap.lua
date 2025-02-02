@@ -19,7 +19,7 @@ local function pop(tbl, key)
 end
 
 ---Register keymaps for csvview
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 function M.register(opts)
   local default_map_opts = { buffer = true }
   local keymaps = vim.deepcopy(opts.keymaps) ---@type table<string|integer, CsvView.Keymap>
@@ -64,7 +64,7 @@ function M.register(opts)
 end
 
 --- Unregister keymaps for csvview
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 function M.unregister(opts)
   local keymaps = opts.keymaps ---@type table<string|integer, CsvView.Keymap>
   for _, map in pairs(keymaps) do

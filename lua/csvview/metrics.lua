@@ -6,7 +6,7 @@ local nop = function() end
 --- @field public rows CsvView.Metrics.Row[]
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
---- @field private _opts CsvView.Options
+--- @field private _opts CsvView.InternalOptions
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -24,7 +24,7 @@ local CsvViewMetrics = {}
 
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@return CsvView.Metrics
 function CsvViewMetrics:new(bufnr, opts)
   self.__index = self

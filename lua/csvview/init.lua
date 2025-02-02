@@ -23,13 +23,14 @@ end
 ---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  opts = config.get(opts)
+  opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
   if M.is_enabled(bufnr) then
     vim.notify("csvview: already enabled for this buffer.")
     return
   end
 
+  -- Create a new CsvView instance and define the on detach callback
   local detach_bufevent_handle --- @type fun()
   local metrics = CsvViewMetrics:new(bufnr, opts)
   local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
@@ -45,6 +46,7 @@ function M.enable(bufnr, opts)
       metrics:update(first, last, last_updated)
     end,
     on_reload = function()
+      -- Clear and recompute metrics when buffer is reloaded
       view:clear()
       metrics:clear()
       view:lock()

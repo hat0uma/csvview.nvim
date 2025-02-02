@@ -308,7 +308,6 @@ function M.prev_field_end(bufnr)
 
   local opts = { anchor = "end" } ---@type CsvView.JumpOpts
   if cursor.kind == "field" then
-    local charlen = vim.fn.charidx(cursor.text, #cursor.text)
     local col_increases = {
       start = -1,
       inside = -1,

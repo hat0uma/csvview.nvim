@@ -28,6 +28,12 @@ local M = {}
 ---@alias CsvView.Options.Actions table<string, CsvView.Action>
 
 --- @class CsvView.Options
+--- @field parser? CsvView.Options.Parser
+--- @field view? CsvView.Options.View
+--- @field keymaps? CsvView.Options.Keymaps
+--- @field actions? table<string, CsvView.Action>
+
+--- @class CsvView.InternalOptions
 M.defaults = {
   parser = {
     --- The number of lines that the asynchronous parser processes per cycle.
@@ -190,11 +196,12 @@ M.defaults = {
   },
 }
 
+---@diagnostic disable-next-line: missing-fields
 M.options = {}
 
 --- get config
 ---@param opts? CsvView.Options
----@return CsvView.Options
+---@return CsvView.InternalOptions
 function M.get(opts)
   return vim.tbl_deep_extend("force", M.options, opts or {})
 end

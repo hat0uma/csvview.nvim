@@ -22,7 +22,7 @@ end
 
 --- Check if line is a comment
 ---@param line string
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@return boolean
 local function is_comment_line(line, opts)
   for _, comment in ipairs(opts.parser.comments) do
@@ -35,7 +35,7 @@ end
 
 --- Get delimiter character
 ---@param bufnr integer
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@return integer
 local function delim_byte(bufnr, opts)
   local delim = opts.parser.delimiter
@@ -60,7 +60,7 @@ end
 
 --- Get quote char character
 ---@param bufnr integer
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@return integer
 local function quote_char_byte(bufnr, opts)
   local delim = opts.parser.quote_char
@@ -119,7 +119,7 @@ end
 ---@param startlnum integer  1-indexed start line number
 ---@param endlnum integer  1-indexed end line number
 ---@param bufnr integer
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 ---@param cb Csvview.Parser.Callbacks
 local function iter(startlnum, endlnum, bufnr, opts, cb)
   local iter_num = (endlnum - startlnum) / opts.parser.async_chunksize
@@ -171,7 +171,7 @@ end
 ---@param startlnum integer?
 ---@param endlnum integer?
 ---@param cb Csvview.Parser.Callbacks
----@param opts CsvView.Options
+---@param opts CsvView.InternalOptions
 function M.iter_lines_async(bufnr, startlnum, endlnum, cb, opts)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(bufnr)
