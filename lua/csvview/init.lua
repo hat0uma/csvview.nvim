@@ -30,18 +30,15 @@ function M.enable(bufnr, opts)
     return
   end
 
-  -- Create a new CsvView instance and define the on detach callback
-  local detach_bufevent_handle --- @type fun()
+  -- Create a new CsvView instance
+  local on_detach --- @type fun()
   local metrics = CsvViewMetrics:new(bufnr, opts)
   local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
-    detach_bufevent_handle()
-    metrics:clear()
-    keymap.unregister(opts)
-    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach" })
+    on_detach()
   end)
 
   -- Register buffer-update events.
-  detach_bufevent_handle = buf.attach(bufnr, {
+  local detach_bufevent_handle = buf.attach(bufnr, {
     on_lines = function(_, _, _, first, last, last_updated)
       metrics:update(first, last, last_updated)
     end,
@@ -55,6 +52,30 @@ function M.enable(bufnr, opts)
       end)
     end,
   })
+
+  -- Define augroup
+  -- Disable csvview when buffer is unloaded
+  local group = vim.api.nvim_create_augroup("csvview", { clear = false })
+  vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
+  vim.api.nvim_create_autocmd("BufUnload", {
+    callback = function()
+      if M.is_enabled(bufnr) then
+        M.disable(bufnr)
+      end
+    end,
+    group = group,
+    desc = "csvview: disable when buffer is unloaded",
+    buffer = bufnr,
+  })
+
+  -- Register detach callback
+  on_detach = function()
+    vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
+    detach_bufevent_handle()
+    metrics:clear()
+    keymap.unregister(opts)
+    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach" })
+  end
 
   -- Calculate metrics and attach view.
   metrics:compute_buffer(function()

@@ -70,7 +70,7 @@ function M.unregister(opts)
   for _, map in pairs(keymaps) do
     local lhs = map[1]
     local mode = map.mode
-    vim.keymap.del(mode, lhs, { buffer = true })
+    pcall(vim.keymap.del, mode, lhs, { buffer = true })
   end
 end
 
