@@ -81,4 +81,4 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
-          release-type: simple
+          config-file: .github/workflows/release-please-config.json
