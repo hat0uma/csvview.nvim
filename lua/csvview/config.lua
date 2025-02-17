@@ -147,7 +147,9 @@ M.defaults = {
     },
     jump_next_field_start = {
       function()
-        require("csvview.jump").next_field_start()
+        for _ = 1, vim.v.count1 do
+          require("csvview.jump").next_field_start()
+        end
       end,
       desc = "[csvview] Jump to the next start of the field",
       noremap = true,
@@ -155,7 +157,9 @@ M.defaults = {
     },
     jump_prev_field_start = {
       function()
-        require("csvview.jump").prev_field_start()
+        for _ = 1, vim.v.count1 do
+          require("csvview.jump").prev_field_start()
+        end
       end,
       desc = "[csvview] Jump to the previous start of the field",
       noremap = true,
@@ -163,7 +167,9 @@ M.defaults = {
     },
     jump_next_field_end = {
       function()
-        require("csvview.jump").next_field_end()
+        for _ = 1, vim.v.count1 do
+          require("csvview.jump").next_field_end()
+        end
       end,
       desc = "[csvview] Jump to the next end of the field",
       noremap = true,
@@ -171,7 +177,9 @@ M.defaults = {
     },
     jump_prev_field_end = {
       function()
-        require("csvview.jump").prev_field_end()
+        for _ = 1, vim.v.count1 do
+          require("csvview.jump").prev_field_end()
+        end
       end,
       desc = "[csvview] Jump to the previous end of the field",
       noremap = true,
@@ -179,7 +187,7 @@ M.defaults = {
     },
     jump_next_row = {
       function()
-        require("csvview.jump").field(0, { pos = { 1, 0 }, anchor = "end" })
+        require("csvview.jump").field(0, { pos = { vim.v.count1, 0 }, anchor = "end" })
       end,
       desc = "[csvview] Jump to the next row",
       noremap = true,
@@ -187,7 +195,7 @@ M.defaults = {
     },
     jump_prev_row = {
       function()
-        require("csvview.jump").field(0, { pos = { -1, 0 }, anchor = "end" })
+        require("csvview.jump").field(0, { pos = { -vim.v.count1, 0 }, anchor = "end" })
       end,
       desc = "[csvview] Jump to the previous row",
       noremap = true,
