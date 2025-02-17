@@ -67,3 +67,18 @@ jobs:
       - name: Run tests
         run: |
           nvim --headless --noplugin -u tests/minimal.vim -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal.vim'}"
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [tests]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          release-type: simple
