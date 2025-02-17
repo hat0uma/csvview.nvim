@@ -1,4 +1,5 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
+local buf = require("csvview.buf")
 local errors = require("csvview.errors")
 
 --- Get end column of line
@@ -241,6 +242,7 @@ M._views = {}
 ---@param bufnr integer
 ---@param view CsvView.View
 function M.attach(bufnr, view)
+  bufnr = buf.resolve_bufnr(bufnr)
   if M._views[bufnr] then
     vim.notify("csvview: already attached for this buffer.")
     return
@@ -252,6 +254,7 @@ end
 --- detach view for buffer
 ---@param bufnr integer
 function M.detach(bufnr)
+  bufnr = buf.resolve_bufnr(bufnr)
   if not M._views[bufnr] then
     return
   end
@@ -263,6 +266,7 @@ end
 ---@param bufnr integer
 ---@return CsvView.View?
 function M.get(bufnr)
+  bufnr = buf.resolve_bufnr(bufnr)
   return M._views[bufnr]
 end
 
