@@ -99,7 +99,7 @@ function View:render_column_index_header(lnum)
   local virt = {} --- @type string[][]
   for i, column in ipairs(self.metrics.columns) do
     local char = tostring(i)
-    virt[#virt + 1] = { string.rep(" ", column.max_width - #char) }
+    virt[#virt + 1] = { string.rep(" ", column.max_width - #char + self.opts.view.spacing) }
     virt[#virt + 1] = { char }
     if i < #self.metrics.columns then
       virt[#virt + 1] = { "," }
@@ -202,6 +202,7 @@ end
 ---@param bot_lnum integer 1-indexed
 ---@param winid integer window id
 function View:render(top_lnum, bot_lnum, winid)
+  -- https://github.com/neovim/neovim/issues/16166
   -- self:render_column_index_header(top_lnum)
 
   --- render all fields in ranges

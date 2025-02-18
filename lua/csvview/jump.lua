@@ -12,17 +12,13 @@ local function clamp(value, min, max)
   return math.min(math.max(value, min), max)
 end
 
---- Checks if a row is skippable for `opts.col_wrap`.
+--- Returns whether the row at the specified index has a field.
 ---@param metrics CsvView.Metrics
 ---@param row_idx integer
 ---@return boolean
-local function is_skippable_row(metrics, row_idx)
+local function has_field(metrics, row_idx)
   local row = metrics.rows[row_idx]
-  if row.is_comment or #row.fields == 0 then
-    return true
-  end
-
-  return false
+  return not row.is_comment and #row.fields > 0
 end
 
 --- Wraps around columns when moving beyond the last column
@@ -35,15 +31,16 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
   local rest = math.abs(relative_col)
   local direction = (relative_col > 0) and 1 or -1
 
-  -- While we still have columns to move (rest)...
+  -- Move horizontally by the amount of relative_col
+  -- When moving to the right, if the end of the line is reached, move to the first column of the next line
+  -- When moving to the left, if the start of the line is reached, move to the last column of the previous line
   while rest > 0 do
     local row = metrics.rows[row_idx]
     if not row then
-      -- We've gone beyond valid rows, so break out
       break
     end
 
-    -- Check if we're trying to move before the first column
+    -- When moving to the left and trying to move before the first column
     if col_idx + direction < 1 then
       if row_idx == 1 then
         -- Already at the first row, clamp to first col
@@ -55,14 +52,14 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
       -- Move to the previous row
       row_idx = row_idx - 1
 
-      -- If the previous row is non-empty, move to the last field
-      -- Otherwise, you might want to decrement rest or skip further empty rows
-      if not is_skippable_row(metrics, row_idx) then
+      -- If there is at least one field in the previous row, move to the last column of that row
+      -- If there are no fields, do not decrease the number of moves, and check the previous row again in the next loop.
+      if has_field(metrics, row_idx) then
         col_idx = #metrics.rows[row_idx].fields
         rest = rest - 1
       end
 
-    -- Check if we're trying to move beyond the last column
+    -- When moving to the right and trying to move beyond the last column
     elseif col_idx + direction > #row.fields then
       if row_idx == #metrics.rows then
         -- Already at the last row, clamp to last col
@@ -74,9 +71,9 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
       -- Move to the next row
       row_idx = row_idx + 1
 
-      -- If the next row is non-empty, move to the first field
-      -- Otherwise, you might want to decrement rest or skip further empty rows
-      if not is_skippable_row(metrics, row_idx) then
+      -- If there is at least one field in the next row, move to the first column of that row
+      -- If there are no fields, do not decrease the number of moves, and check the next row again in the next loop.
+      if has_field(metrics, row_idx) then
         col_idx = 1
         rest = rest - 1
       end
@@ -87,8 +84,12 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
     end
   end
 
-  -- If we land exactly on an empty field at the end of a line,
-  -- we might need to move to the next row. This recursion is a neat trick but watch for infinite loops!
+  --
+  -- Additional processing when the destination is the last column of the row and is empty data
+  --
+  -- If the destination is empty data, generally move to the delimiter behind it,
+  -- but if the end of the line is empty, you cannot jump because there is no delimiter behind it. Move one more column.
+  --
   if col_idx ~= 0 and metrics:is_last_col(row_idx, col_idx) and metrics:is_empty_field(row_idx, col_idx) then
     row_idx, col_idx = wrap_column(metrics, row_idx, col_idx, direction)
   end

@@ -333,7 +333,14 @@ end
 ---@param start integer
 ---@param num integer
 function CsvViewMetrics:_add_row_placeholders(start, num)
-  -- `table.insert` is inefficient when editing large buffers
+  --
+  -- This function is equivalent to the following code, but is more efficient when editing large buffers.
+  --
+  -- for i = 1, num do
+  --   table.insert( self.rows, start, <placeholder> )
+  -- end
+  --
+
   local len = #self.rows
   for i = len, start, -1 do
     self.rows[i + num] = self.rows[i]
@@ -347,7 +354,14 @@ end
 ---@param start integer
 ---@param num integer
 function CsvViewMetrics:_remove_rows(start, num)
-  -- `table.remove` is inefficient when editing large buffers
+  --
+  -- This function is equivalent to the following code, but is more efficient when editing large buffers.
+  --
+  -- for i = 1, num do
+  --   table.remove( self.rows, start )
+  -- end
+  --
+
   local len = #self.rows
   for i = start, len do
     self.rows[i] = self.rows[i + num]
