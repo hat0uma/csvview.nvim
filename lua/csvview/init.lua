@@ -40,8 +40,31 @@ function M.enable(bufnr, opts)
 
   -- Register buffer-update events.
   local detach_bufevent_handle = buf.attach(bufnr, {
-    on_lines = function(_, _, _, first, last, last_updated)
-      metrics:update(first, last, last_updated)
+    on_lines = function(_, _, changedtick, first, last, last_updated)
+      if changedtick == vim.NIL then
+        -- Handle update preview with inccommand
+        -- Temporarily disable tabular view when updates are made with `inccommand`
+        view:clear()
+        view:lock()
+
+        -- Resume table view when `inccommand` ends
+        -- NOTE: A normal buffer update event occurs if the preview changes are accepted,
+        -- but if canceled, no buffer update event occurs, so unlock on CmdlineLeave event
+        vim.api.nvim_create_autocmd("CmdlineLeave", {
+          callback = function()
+            view:unlock()
+          end,
+          once = true,
+        })
+      else
+        -- Handle normal buffer update events
+        -- TODO: Process the case where the next update comes before the current update is completed
+        view:clear()
+        view:lock()
+        metrics:update(first, last, last_updated, function()
+          view:unlock()
+        end)
+      end
     end,
     on_reload = function()
       -- Clear and recompute metrics when buffer is reloaded

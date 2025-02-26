@@ -51,6 +51,7 @@ function M.attach(bufnr, callbacks)
       on_changedtick = wrap_buf_attach_handler(callbacks.on_changedtick),
       on_reload = wrap_buf_attach_handler(callbacks.on_reload),
       on_detach = wrap_buf_attach_handler(callbacks.on_detach),
+      preview = true, -- for inccommand
     })
   end
 
