@@ -1,3 +1,4 @@
+local config = require("csvview.config")
 local parser = require("csvview.parser")
 
 local nop = function() end
@@ -7,6 +8,7 @@ local nop = function() end
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
 --- @field private _opts CsvView.InternalOptions
+--- @field private _delimiter_len integer
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -34,6 +36,7 @@ function CsvViewMetrics:new(bufnr, opts)
   obj._opts = opts
   obj.rows = {}
   obj.columns = {}
+  obj._delimiter_len = #config.resolve_delimiter(opts, bufnr)
 
   return setmetatable(obj, self)
 end
@@ -132,7 +135,7 @@ function CsvViewMetrics:col_idx_to_byte(row_idx, col_idx)
 
   local offset = 0
   for i = 1, col_idx - 1 do
-    offset = offset + row.fields[i].len + 1 -- Add 1 for the delimiter
+    offset = offset + row.fields[i].len + self._delimiter_len
   end
   return offset, row.fields[col_idx] and row.fields[col_idx].len or 0
 end
@@ -157,10 +160,10 @@ function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
 
   local offset = 0
   for i, field in ipairs(row.fields) do
-    if byte < (offset + field.len + 1) then
+    if byte < (offset + field.len + self._delimiter_len) then
       return i, offset
     end
-    offset = offset + field.len + 1
+    offset = offset + field.len + self._delimiter_len
   end
 
   return #row.fields, offset

@@ -1,5 +1,6 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 local buf = require("csvview.buf")
+local config = require("csvview.config")
 local errors = require("csvview.errors")
 
 --- Get end column of line
@@ -18,6 +19,7 @@ end
 --- @field private _extmarks integer[]
 --- @field private _on_dispose function?
 --- @field private _locked boolean
+--- @field private _delimiter string
 local View = {}
 
 --- create new view
@@ -35,6 +37,8 @@ function View:new(bufnr, metrics, opts, on_dispose)
   obj.opts = opts
   obj._extmarks = {}
   obj._on_dispose = on_dispose
+  obj._locked = false
+  obj._delimiter = config.resolve_delimiter(opts, bufnr)
   return setmetatable(obj, self)
 end
 
@@ -117,7 +121,7 @@ end
 function View:_highlight_delimiter(lnum, offset)
   self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
     hl_group = "CsvViewDelimiter",
-    end_col = offset + 1,
+    end_col = offset + #self._delimiter,
   })
 end
 
@@ -211,7 +215,7 @@ function View:_render_line(lnum, winid)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })
     end
-    offset = offset + field.len + 1
+    offset = offset + field.len + #self._delimiter
   end
 end
 

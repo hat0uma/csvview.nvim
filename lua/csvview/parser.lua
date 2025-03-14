@@ -1,23 +1,41 @@
 local M = {}
+local config = require("csvview.config")
 local errors = require("csvview.errors")
 
 ---@class Csvview.Parser.Callbacks
 ---@field on_line fun(lnum:integer,is_comment:boolean,fields:string[]) the callback to be called for each line
 ---@field on_end fun() the callback to be called when parsing is done
 
---- Find the next character in a string.
----@param s string
----@param start_pos integer start position
----@param char integer byte value of character to find
----@return integer?
-local function find_char(s, start_pos, char)
-  local len = #s
-  for i = start_pos, len do
-    if string.byte(s, i) == char then
-      return i
-    end
-  end
-  return nil
+---@enum ParseState
+local PARSE_STATES = {
+  --- Parsing characters within a field.
+  IN_FIELD = 1,
+  --- Parsing characters within a quoted field.
+  IN_QUOTED_FIELD = 2,
+  --- Checking if the current sequence of characters matches the delimiter.
+  MATCHING_DELIMITER = 3,
+}
+
+---@class CsvView.Parser.DelimiterPolicy
+---@field match fun(s:string, pos:integer, char:integer, match_count:integer): boolean
+---@field check_match_complete fun(s:string, pos:integer, char:integer, match_count:integer): boolean
+
+--- Create a delimiter policy.
+---@param opts CsvView.InternalOptions
+---@param bufnr integer
+---@return CsvView.Parser.DelimiterPolicy
+function M._create_delimiter_policy(opts, bufnr)
+  local delim = config.resolve_delimiter(opts, bufnr)
+  local delim_len = #delim
+  local delim_bytes = { string.byte(delim, 1, delim_len) }
+  return { ---@type CsvView.Parser.DelimiterPolicy
+    match = function(s, pos, char, match_count)
+      return char == delim_bytes[match_count + 1]
+    end,
+    check_match_complete = function(s, pos, char, match_count)
+      return match_count == delim_len
+    end,
+  }
 end
 
 --- Check if line is a comment
@@ -31,31 +49,6 @@ local function is_comment_line(line, opts)
     end
   end
   return false
-end
-
---- Get delimiter character
----@param bufnr integer
----@param opts CsvView.InternalOptions
----@return integer
-local function delim_byte(bufnr, opts)
-  local delim = opts.parser.delimiter
-  ---@diagnostic disable-next-line: no-unknown
-  local char
-  if type(delim) == "function" then
-    char = delim(bufnr)
-  end
-
-  if type(delim) == "table" then
-    char = delim.ft[vim.bo.filetype] or delim.default
-  end
-
-  if type(delim) == "string" then
-    char = delim
-  end
-
-  assert(type(char) == "string", string.format("delimiter must be a string, got %s", type(char)))
-  assert(#char == 1, string.format("delimiter must be a single character, got %s", char))
-  return char:byte()
 end
 
 --- Get quote char character
@@ -75,42 +68,72 @@ local function quote_char_byte(bufnr, opts)
   return char:byte()
 end
 
---- parse line
+--- Parse a CSV line.
 ---@param line string
----@param delim integer
----@param quote_char integer
+---@param delimiter CsvView.Parser.DelimiterPolicy delimiter policy.
+---@param quote_char integer byte code of the quote character.
 ---@return string[]
-function M._parse_line(line, delim, quote_char)
-  local len = #line
-  if len == 0 then
-    return {}
-  end
+function M._parse_line(line, delimiter, quote_char)
+  local fields = {} ---@type string[]
 
-  local fields = {} --- @type string[]
+  local len = #line
+  local state = PARSE_STATES.IN_FIELD
+  local delimiter_match_count = 0
   local field_start_pos = 1
   local pos = 1
 
+  if len == 0 then
+    return fields
+  end
+
+  -- DFA-based parser that handles quoted fields and delimiter characters.
+  --
+  -- The parser transitions between three states:
+  --   **IN_FIELD**: Checks for the start of a delimiter or a quote.
+  --   **IN_QUOTED_FIELD**: Looks for the closing quote to return to `IN_FIELD`.
+  --   **MATCHING_DELIMITER**: Continues matching the delimiter or transitions to `IN_QUOTED_FIELD` if a quote is found.
+  -- The exact implementation should consider escaping quotes, but it is omitted because it is irrelevant to the display.
   while pos <= len do
-    local char = string.byte(line, pos)
-    if char == delim then
-      -- add field (even if empty).
-      fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
-      field_start_pos = pos + 1
-    elseif char == quote_char then
-      -- find closing quote and skip it.
-      -- if there is no closing quote, skip the rest of the line.
-      local close_pos = find_char(line, pos + 1, char)
-      if close_pos then
-        pos = close_pos
+    local char = line:byte(pos)
+    if state == PARSE_STATES.IN_FIELD then
+      if delimiter.match(line, pos, char, 0) then
+        delimiter_match_count = 1
+        state = PARSE_STATES.MATCHING_DELIMITER
+      elseif char == quote_char then
+        state = PARSE_STATES.IN_QUOTED_FIELD
+      end
+    elseif state == PARSE_STATES.IN_QUOTED_FIELD then
+      if char == quote_char then
+        state = PARSE_STATES.IN_FIELD
+      end
+    elseif state == PARSE_STATES.MATCHING_DELIMITER then
+      if delimiter.match(line, pos, char, delimiter_match_count) then
+        delimiter_match_count = delimiter_match_count + 1
+      elseif char == quote_char then
+        delimiter_match_count = 0
+        state = PARSE_STATES.IN_QUOTED_FIELD
       else
-        pos = len
+        delimiter_match_count = 0
+        state = PARSE_STATES.IN_FIELD
       end
     end
+
+    -- If the delimiter is fully matched, add the field to the list and reset the state.
+    if
+      state == PARSE_STATES.MATCHING_DELIMITER
+      and delimiter.check_match_complete(line, pos, char, delimiter_match_count)
+    then
+      fields[#fields + 1] = line:sub(field_start_pos, pos - delimiter_match_count)
+      field_start_pos = pos + 1
+      delimiter_match_count = 0
+      state = PARSE_STATES.IN_FIELD
+    end
+
     pos = pos + 1
   end
 
-  -- add last field (even if empty).
-  fields[#fields + 1] = string.sub(line, field_start_pos, pos - 1)
+  -- -- Add the last field to the list.
+  fields[#fields + 1] = line:sub(field_start_pos, pos - 1)
   return fields
 end
 
@@ -129,15 +152,15 @@ local function iter(startlnum, endlnum, bufnr, opts, cb)
     vim.notify("csvview: parsing buffer, please wait...")
   end
 
-  local delim = delim_byte(bufnr, opts)
   local quote_char = quote_char_byte(bufnr, opts)
+  local delimiter = M._create_delimiter_policy(opts, bufnr)
 
   local function parse_line(lnum) ---@param lnum integer
     local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, true)[1]
     if is_comment_line(line, opts) then
       cb.on_line(lnum, true, {})
     else
-      local fields = M._parse_line(line, delim, quote_char)
+      local fields = M._parse_line(line, delimiter, quote_char)
       cb.on_line(lnum, false, fields)
     end
   end

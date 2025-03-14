@@ -6,47 +6,51 @@ local p = require("csvview.parser")
 describe("parser", function()
   config.setup()
 
-  local delim = ","
-  local delim_byte = string.byte(delim)
   local quote_char = '"'
   local quote_char_byte = string.byte(quote_char)
 
   describe("_parse_line", function()
+    local opts = config.get({ parser = { delimiter = "," } })
+    local delimiter = p._create_delimiter_policy(opts, 0)
+
     it("line without empty fields", function()
-      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc,de,f,g,h", delim_byte, quote_char_byte))
+      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc,de,f,g,h", delimiter, quote_char_byte))
     end)
 
     it("should works for line includes empty fields", function()
-      assert.are.same({ "abc", "de", "", "g", "h" }, p._parse_line("abc,de,,g,h", delim_byte, quote_char_byte))
-      assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,", delim_byte, quote_char_byte))
-      assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g", delim_byte, quote_char_byte))
-      assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,", delim_byte, quote_char_byte))
+      assert.are.same({ "abc", "de", "", "g", "h" }, p._parse_line("abc,de,,g,h", delimiter, quote_char_byte))
+      assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,", delimiter, quote_char_byte))
+      assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g", delimiter, quote_char_byte))
+      assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,", delimiter, quote_char_byte))
     end)
 
     it("empty line", function()
-      assert.are.same({}, p._parse_line("", delim_byte, quote_char_byte))
+      assert.are.same({}, p._parse_line("", delimiter, quote_char_byte))
     end)
     it("should works for line includes quoted comma.", function()
-      assert.are.same({ "abc", "de", '"f,g"', "h" }, p._parse_line('abc,de,"f,g",h', delim_byte, quote_char_byte))
+      assert.are.same({ "abc", "de", '"f,g"', "h" }, p._parse_line('abc,de,"f,g",h', delimiter, quote_char_byte))
     end)
     it("handles fields with missing closing quotes", function()
-      assert.are.same({ "abc", "de", '"f,g,h' }, p._parse_line('abc,de,"f,g,h', delim_byte, quote_char_byte))
+      assert.are.same({ "abc", "de", '"f,g,h' }, p._parse_line('abc,de,"f,g,h', delimiter, quote_char_byte))
     end)
     it("should work for line including single quoted comma.", function()
       local single_quote_char = "'"
       local single_quote_char_byte = string.byte(single_quote_char)
-      assert.are.same(
-        { "abc", "de", "'f,g'", "h" },
-        p._parse_line("abc,de,'f,g',h", delim_byte, single_quote_char_byte)
-      )
+      assert.are.same({ "abc", "de", "'f,g'", "h" }, p._parse_line("abc,de,'f,g',h", delimiter, single_quote_char_byte))
     end)
 
     it("parses tab-delimited lines correctly", function()
-      local delim_tab = "\t"
-      local delim_tab_byte = string.byte(delim_tab)
+      local _opts = config.get({ parser = { delimiter = "\t" } })
+      local _delimiter = p._create_delimiter_policy(_opts, 0)
+      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc\tde\tf\tg\th", _delimiter, quote_char_byte))
+    end)
+
+    it("parses multi-character delimiter correctly", function()
+      local _opts = config.get({ parser = { delimiter = "|!|!|" } })
+      local _delimiter = p._create_delimiter_policy(_opts, 0)
       assert.are.same(
         { "abc", "de", "f", "g", "h" },
-        p._parse_line("abc\tde\tf\tg\th", delim_tab_byte, quote_char_byte)
+        p._parse_line("abc|!|!|de|!|!|f|!|!|g|!|!|h", _delimiter, quote_char_byte)
       )
     end)
   end)
@@ -68,9 +72,9 @@ describe("parser", function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
       local actual = {}
-      local opts = config.get({ parser = { async_chunksize = 1, delimiter = delim } })
+      local opts = config.get({ parser = { async_chunksize = 1, delimiter = "," } })
       p.iter_lines_async(buf, nil, nil, {
-        on_line = function(_, is_comment, line)
+        on_line = function(_, _, line)
           table.insert(actual, line)
         end,
         on_end = vim.schedule_wrap(function()
@@ -100,7 +104,7 @@ describe("parser", function()
 
       local actual = {}
       p.iter_lines_async(buf, startlnum, endlnum, {
-        on_line = function(_, is_comment, line)
+        on_line = function(_, _, line)
           table.insert(actual, line)
         end,
         on_end = vim.schedule_wrap(function()
