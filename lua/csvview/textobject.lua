@@ -1,5 +1,6 @@
 local M = {}
 local buf = require("csvview.buf")
+local config = require("csvview.config")
 local util = require("csvview.util")
 
 --- Selects the current field.
@@ -30,15 +31,16 @@ function M.field(bufnr, opts)
   end
 
   -- Get the byte offset of the current field.
+  local delimiter_len = config.resolve_delimiter(view.opts, bufnr)
   local offset, field_len = view.metrics:col_idx_to_byte(row_idx, col_idx)
   local start_col = offset
   local end_col = offset + field_len - 1
   local is_last_col = col_idx == #view.metrics.rows[row_idx].fields
   if include_delimiter then
     if is_last_col then
-      start_col = start_col - 1 -- include the before delimiter
+      start_col = start_col - #delimiter_len -- include the before delimiter
     else
-      end_col = end_col + 1 -- include the after delimiter
+      end_col = end_col + #delimiter_len -- include the after delimiter
     end
   end
 
