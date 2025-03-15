@@ -146,8 +146,9 @@ end
 ---@param offset integer 0-indexed byte offset
 function View:_render_border(lnum, offset)
   self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
-    virt_text = { { "│", "CsvViewDelimiter" } },
-    virt_text_pos = "overlay",
+    conceal = "│",
+    end_col = offset + #self._delimiter,
+    hl_group = "CsvViewDelimiter",
   })
 end
 
@@ -226,6 +227,14 @@ end
 function View:render(top_lnum, bot_lnum, winid)
   -- https://github.com/neovim/neovim/issues/16166
   -- self:render_column_index_header(top_lnum)
+
+  -- set conceal for display_mode="border"
+  if self.opts.view.display_mode == "border" then
+    vim.api.nvim_win_call(winid, function()
+      vim.wo[winid][0].concealcursor = "nvic"
+      vim.wo[winid][0].conceallevel = 2
+    end)
+  end
 
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
@@ -306,12 +315,6 @@ function M.setup()
       if not view then
         return false
       end
-
-      -- do not rerender when in insert mode
-      -- local m = vim.api.nvim_get_mode()
-      -- if string.find(m["mode"], "i") then
-      --   return false
-      -- end
 
       -- do not render when locked
       if view:is_locked() then

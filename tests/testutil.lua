@@ -12,7 +12,7 @@ function M.get_lines_with_extmarks(bufnr, ns)
   for _, extmark in ipairs(extmarks) do
     local row = extmark[2] --- @type integer
     local col = extmark[3] --- @type integer
-    local details = extmark[4] --- @type { virt_text: string[][]?, virt_text_pos: string? }
+    local details = extmark[4] --- @type vim.api.keyset.extmark_details
     local lnum = row + 1
     if details.virt_text_pos == "inline" then
       for _, virt_text in pairs(details.virt_text) do
@@ -29,6 +29,14 @@ function M.get_lines_with_extmarks(bufnr, ns)
       local suffix = lines[lnum]:sub(col + col_offset[lnum] + 1 + vim.fn.strdisplaywidth(virt_text))
       lines[lnum] = prefix .. virt_text .. suffix
       col_offset[lnum] = col_offset[lnum] + #virt_text - vim.fn.strdisplaywidth(virt_text)
+    elseif details.conceal ~= nil then
+      local conceal = details.conceal
+      local end_col = details.end_col
+      col_offset[lnum] = col_offset[lnum] or 0
+      local prefix = lines[lnum]:sub(1, col + col_offset[lnum])
+      local suffix = lines[lnum]:sub(end_col + col_offset[lnum] + 1)
+      lines[lnum] = prefix .. conceal .. suffix
+      col_offset[lnum] = col_offset[lnum] + #conceal - (end_col - col)
     end
   end
 
