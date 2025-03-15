@@ -121,6 +121,22 @@ function View:_highlight_delimiter(lnum, offset)
   })
 end
 
+--- highlight field
+---@param lnum integer 1-indexed lnum
+---@param column_index integer 1-indexed column index
+---@param offset integer 0-indexed byte offset
+---@param field CsvView.Metrics.Field
+function View:_highlight_field(lnum, column_index, offset, field)
+  -- use built-in csv syntax highlight group.
+  -- csvCol0 ~ csvCol8
+  -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
+  local hl_group = "csvCol" .. (column_index - 1) % 9
+  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+    hl_group = hl_group,
+    end_col = offset + field.len,
+  })
+end
+
 --- render table border
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
@@ -156,6 +172,8 @@ function View:_render_field(lnum, column_index, field, offset)
     -- not computed yet.
     return
   end
+
+  self:_highlight_field(lnum, column_index, offset, field)
 
   -- if column is last, do not render border.
   local render_border = column_index < #self.metrics.rows[lnum].fields
