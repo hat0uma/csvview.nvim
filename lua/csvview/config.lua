@@ -96,6 +96,9 @@ M.defaults = {
     --- The display method of the delimiter
     --- "highlight" highlights the delimiter
     --- "border" displays the delimiter with `│`
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable display_mode=border
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
   },

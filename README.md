@@ -277,7 +277,7 @@ To toggle CSV view, use the following command. By default, the delimiter is `,` 
 To toggle CSV view with a custom field delimiter, a custom string delimiter and comment, use the following command.
 
 ```vim
-:CsvViewToggle delimiter=, quote_char=' comment=#
+:CsvViewToggle delimiter=, quote_char=' comment=# display_mode=border
 ```
 
 ### Lua API

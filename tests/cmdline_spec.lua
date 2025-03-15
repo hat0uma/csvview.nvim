@@ -25,6 +25,7 @@ describe("Cmdline", function()
       set = function(options, value)
         options.another = value
       end,
+      candidates = { "value1", "value2" },
     },
   })
 
@@ -84,7 +85,13 @@ describe("Cmdline", function()
           {
             arg_lead = "",
             cmd_line = "",
-            expected = { "text1=", "text2=", "number=", "another=" },
+            expected = {
+              "text1=",
+              "text2=",
+              "number=",
+              "another=value1",
+              "another=value2",
+            },
           },
         },
       },
@@ -104,7 +111,10 @@ describe("Cmdline", function()
           {
             arg_lead = "a",
             cmd_line = "MyCommand a",
-            expected = { "another=" },
+            expected = {
+              "another=value1",
+              "another=value2",
+            },
           },
         },
       },
@@ -114,7 +124,12 @@ describe("Cmdline", function()
           {
             arg_lead = "",
             cmd_line = "MyCommand text1=abc ",
-            expected = { "text2=", "number=", "another=" },
+            expected = {
+              "text2=",
+              "number=",
+              "another=value1",
+              "another=value2",
+            },
           },
           {
             arg_lead = "a",

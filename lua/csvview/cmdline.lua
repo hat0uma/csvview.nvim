@@ -87,19 +87,6 @@ function Cmdline:_unescape(value)
   )
 end
 
---- Get the list of option keys
----@return string[]
-function Cmdline:_opt_keys()
-  return vim.tbl_map(
-    ---@param v Csvview.Cmdline.Var
-    ---@return string
-    function(v)
-      return v.name
-    end,
-    self.vars
-  )
-end
-
 --- Complete options for CsvView commands
 ---@param arg_lead string
 ---@param cmd_line string
@@ -107,14 +94,6 @@ end
 ---@return string[]
 function Cmdline:complete(arg_lead, cmd_line, cursor_pos)
   -- print(arg_lead, cmd_line, cursor_pos)
-  local opts_candidates = vim.tbl_map(
-    ---@param v string
-    ---@return string
-    function(v)
-      return v .. "="
-    end,
-    self:_opt_keys()
-  )
 
   --- Check if the command line already has the key
   ---@param key string
@@ -123,14 +102,41 @@ function Cmdline:complete(arg_lead, cmd_line, cursor_pos)
     return string.find(cmd_line, key, 1, true) ~= nil and not vim.endswith(cmd_line, key)
   end
 
-  return vim.tbl_filter(
-    ---@param v string
-    ---@return string
-    function(v)
-      return vim.startswith(v, arg_lead) and not already_has_opts(v)
-    end,
-    opts_candidates
-  )
+  --- Filter and format the options for completion
+  return vim
+    .iter(self.vars)
+    :filter(
+      ---@param v Csvview.Cmdline.Var
+      ---@return boolean
+      function(v)
+        return vim.startswith(v.name, arg_lead) and not already_has_opts(v.name)
+      end
+    )
+    :fold(
+      {},
+      ---@param acc string[]
+      ---@param v Csvview.Cmdline.Var
+      ---@return string[]
+      function(acc, v)
+        -- format the options as key=candidate
+        -- e.g. option1 has no candidates, option2 has "candidate1" and "candidate2"
+        -- completion will return:
+        -- {
+        --   "option1=",
+        --   "option2=candidate1",
+        --   "option2=candidate2",
+        -- }
+        if not v.candidates or #v.candidates == 0 then
+          table.insert(acc, v.name .. "=")
+          return acc
+        end
+
+        for _, candidate in ipairs(v.candidates or {}) do
+          table.insert(acc, v.name .. "=" .. candidate)
+        end
+        return acc
+      end
+    )
 end
 
 return Cmdline

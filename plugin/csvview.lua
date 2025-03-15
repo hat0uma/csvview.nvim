@@ -26,6 +26,15 @@ local cmdline = Cmdline:new({
       options.parser.comments = { value }
     end,
   },
+  {
+    name = "display_mode",
+    ---@param options CsvView.Options
+    ---@param value string
+    set = function(options, value)
+      options.view.display_mode = value
+    end,
+    candidates = { "highlight", "border" },
+  },
 })
 
 local function create_empty_opts()
