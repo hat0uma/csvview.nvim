@@ -376,6 +376,9 @@ vim.api.nvim_create_autocmd("User", {
 | **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
 | **CsvViewComment**   | link to `Comment`  | used for comment    |
 
+> [!NOTE]
+> For field highlighting, this plugin utilizes the `csvCol0` ~ `csvCol8` highlight groups that are used by Neovim's built-in CSV syntax highlighting.
+
 ## 📝 TODO
 
 - [x] Customizable delimiter character.
