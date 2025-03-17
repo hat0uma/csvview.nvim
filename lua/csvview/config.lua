@@ -223,4 +223,28 @@ function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 end
 
+--- Resolve delimiter character
+---@param opts CsvView.InternalOptions
+---@param bufnr integer
+---@return string
+function M.resolve_delimiter(opts, bufnr)
+  local delim = opts.parser.delimiter
+  ---@diagnostic disable-next-line: no-unknown
+  local char
+  if type(delim) == "function" then
+    char = delim(bufnr)
+  end
+
+  if type(delim) == "table" then
+    char = delim.ft[vim.bo.filetype] or delim.default
+  end
+
+  if type(delim) == "string" then
+    char = delim
+  end
+
+  assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))
+  return char
+end
+
 return M

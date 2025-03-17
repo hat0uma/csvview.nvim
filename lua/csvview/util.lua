@@ -63,7 +63,7 @@ function M.get_cursor(bufnr)
   -- Determine the anchor state of the cursor within this field
   ---@type CsvView.CursorAnchor
   local anchor
-  if offset_in_field == field.len then
+  if offset_in_field >= field.len then
     anchor = "delimiter"
   elseif offset_in_field == 0 then
     anchor = "start"
