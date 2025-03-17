@@ -42,6 +42,14 @@ function View:new(bufnr, metrics, opts, on_dispose)
   return setmetatable(obj, self)
 end
 
+--- Add extmark to buffer
+---@param line integer
+---@param col integer
+---@param opts vim.api.keyset.set_extmark
+function View:_add_extmark(line, col, opts)
+  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, line, col, opts)
+end
+
 --- Align field to the left
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
@@ -50,12 +58,11 @@ end
 ---@param border boolean
 function View:_align_left(lnum, offset, padding, field, border)
   if padding > 0 then
-    self._extmarks[#self._extmarks + 1] =
-      vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset + field.len, {
-        virt_text = { { string.rep(" ", padding) } },
-        virt_text_pos = "inline",
-        right_gravity = true,
-      })
+    self:_add_extmark(lnum - 1, offset + field.len, {
+      virt_text = { { string.rep(" ", padding) } },
+      virt_text_pos = "inline",
+      right_gravity = true,
+    })
   end
 
   if not border then
@@ -78,7 +85,7 @@ end
 ---@param border boolean
 function View:_align_right(lnum, offset, padding, field, border)
   if padding > 0 then
-    self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+    self:_add_extmark(lnum - 1, offset, {
       virt_text = { { string.rep(" ", padding) } },
       virt_text_pos = "inline",
       right_gravity = false,
@@ -109,20 +116,21 @@ function View:render_column_index_header(lnum)
       virt[#virt + 1] = { "," }
     end
   end
-  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
-    virt_lines = { virt },
-    virt_lines_above = true,
-  })
+  self:_add_extmark(lnum - 1, 0, { virt_lines = { virt }, virt_lines_above = true })
 end
 
 --- highlight delimiter char
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 function View:_highlight_delimiter(lnum, offset)
-  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
-    hl_group = "CsvViewDelimiter",
-    end_col = offset + #self._delimiter,
-  })
+  self:_add_extmark(lnum - 1, offset, { hl_group = "CsvViewDelimiter", end_col = offset + #self._delimiter })
+end
+
+--- highlight comment line
+---@param lnum integer 1-indexed lnum
+---@param winid integer window id
+function View:_highlight_comment(lnum, winid)
+  self:_add_extmark(lnum - 1, 0, { hl_group = "CsvViewComment", end_col = end_col(winid, lnum) })
 end
 
 --- highlight field
@@ -135,17 +143,14 @@ function View:_highlight_field(lnum, column_index, offset, field)
   -- csvCol0 ~ csvCol8
   -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
   local hl_group = "csvCol" .. (column_index - 1) % 9
-  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
-    hl_group = hl_group,
-    end_col = offset + field.len,
-  })
+  self:_add_extmark(lnum - 1, offset, { hl_group = hl_group, end_col = offset + field.len })
 end
 
 --- render table border
 ---@param lnum integer 1-indexed lnum
 ---@param offset integer 0-indexed byte offset
 function View:_render_border(lnum, offset)
-  self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, offset, {
+  self:_add_extmark(lnum - 1, offset, {
     conceal = "│",
     end_col = offset + #self._delimiter,
     hl_group = "CsvViewDelimiter",
@@ -201,11 +206,7 @@ function View:_render_line(lnum, winid)
   end
 
   if line.is_comment then
-    -- highlight comment line
-    self._extmarks[#self._extmarks + 1] = vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, lnum - 1, 0, {
-      hl_group = "CsvViewComment",
-      end_col = end_col(winid, lnum),
-    })
+    self:_highlight_comment(lnum, winid)
     return
   end
 
