@@ -243,6 +243,24 @@ function View:_render_line(lnum, winid)
   end
 end
 
+--- Set window options for view
+--- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
+--- Therefore, it is set to be executed in the next tick using `vim.schedule_wrap()`.
+---@type fun(self:CsvView.View, winid:integer )
+View._set_window_options = vim.schedule_wrap(function(self, winid)
+  if not vim.api.nvim_win_is_valid(winid) then
+    return
+  end
+
+  if self.opts.view.display_mode == "border" then
+    vim.api.nvim_win_call(winid, function()
+      -- Settings for conceal delimiter with border
+      vim.wo[winid][0].concealcursor = "nvic"
+      vim.wo[winid][0].conceallevel = 2
+    end)
+  end
+end)
+
 --- Render view
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
@@ -251,13 +269,8 @@ function View:render(top_lnum, bot_lnum, winid)
   -- https://github.com/neovim/neovim/issues/16166
   -- self:render_column_index_header(top_lnum)
 
-  -- set conceal for display_mode="border"
-  if self.opts.view.display_mode == "border" then
-    vim.api.nvim_win_call(winid, function()
-      vim.wo[winid][0].concealcursor = "nvic"
-      vim.wo[winid][0].conceallevel = 2
-    end)
-  end
+  -- set window options for view
+  self:_set_window_options(winid)
 
   --- render all fields in ranges
   for lnum = top_lnum, bot_lnum do
@@ -313,8 +326,11 @@ function M.detach(bufnr)
   if not M._views[bufnr] then
     return
   end
-  M._views[bufnr]:dispose()
+
+  -- Dispose view
+  local view = M._views[bufnr]
   M._views[bufnr] = nil
+  view:dispose()
 end
 
 --- Get view for buffer
@@ -325,10 +341,10 @@ function M.get(bufnr)
   return M._views[bufnr]
 end
 
---- Render view
+--- Render view with window ranges
 ---@param bufnr integer
 ---@param view CsvView.View
-local function render(bufnr, view)
+local function render_with_window_ranges(bufnr, view)
   -- Do not render if locked
   if view:is_locked() then
     return
@@ -364,7 +380,7 @@ function M.setup()
     on_start = function(_, _)
       -- Render all views
       for bufnr, view in pairs(M._views) do
-        render(bufnr, view)
+        render_with_window_ranges(bufnr, view)
       end
       return false
     end,
