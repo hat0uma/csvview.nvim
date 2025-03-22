@@ -98,14 +98,14 @@ function M.enable(bufnr, opts)
     detach_bufevent_handle()
     metrics:clear()
     keymap.unregister(opts)
-    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach" })
+    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
 
   -- Calculate metrics and attach view.
   metrics:compute_buffer(function()
     attach_view(bufnr, view)
     keymap.register(opts)
-    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach" })
+    vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
 end
 

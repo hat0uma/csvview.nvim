@@ -363,8 +363,9 @@ local group = vim.api.nvim_create_augroup("CsvViewEvents", {})
 vim.api.nvim_create_autocmd("User", {
   pattern = "CsvViewAttach",
   group = group,
-  callback = function()
-    print("CsvView is attached")
+  callback = function(args)
+    local bufnr = tonumber(args.data)
+    print("CsvView is attached", bufnr)
   end,
 })
 ```
