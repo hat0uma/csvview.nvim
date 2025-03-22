@@ -371,10 +371,11 @@ vim.api.nvim_create_autocmd("User", {
 
 ## 🌈 Highlights
 
-| Group                | Default            | Description         |
-| -------------------- | ------------------ | ------------------- |
-| **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
-| **CsvViewComment**   | link to `Comment`  | used for comment    |
+| Group                            | Default                    | Description                      |
+| -------------------------------- | -------------------------- | -------------------------------- |
+| **CsvViewDelimiter**             | link to `Comment`          | used for `,`                     |
+| **CsvViewComment**               | link to `Comment`          | used for comment                 |
+| **CsvViewStickyHeaderSeparator** | link to `CsvViewDelimiter` | used for sticky header separator |
 
 > [!NOTE]
 > For field highlighting, this plugin utilizes the `csvCol0` ~ `csvCol8` highlight groups that are used by Neovim's built-in CSV syntax highlighting.

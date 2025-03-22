@@ -97,7 +97,7 @@ local function get_sticky_header_border(opts)
     return nil
   end
 
-  local separator = { opts.view.sticky_header.separator, "CsvViewDelimiter" }
+  local separator = { opts.view.sticky_header.separator, "CsvViewStickyHeaderSeparator" }
   return { "", "", "", "", separator, separator, separator, "" }
 end
 
@@ -243,6 +243,10 @@ end
 
 --- Setup the sticky header feature.
 function M.setup()
+  -- Highlights
+  vim.api.nvim_set_hl(0, "CsvViewStickyHeaderSeparator", { link = "CsvViewDelimiter", default = true })
+
+  -- Autocommands
   local group = vim.api.nvim_create_augroup("csvview.sticky_header", {})
   vim.api.nvim_create_autocmd({
     "WinScrolled",
