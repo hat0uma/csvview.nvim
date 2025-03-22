@@ -50,6 +50,7 @@ M.defaults = {
 
     --- The delimiter character
     --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
+    --- Currently, only fixed-length strings are supported. Regular expressions such as \s+ are not supported.
     --- e.g:
     ---  delimiter = ","
     ---  delimiter = function(bufnr) return "," end
