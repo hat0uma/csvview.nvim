@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/hat0uma/csvview.nvim/compare/v1.1.0...v1.1.1) (2025-03-22)
+
+
+### Bug Fixes
+
+* add bufnr to `CsvViewAttach`,`CsvViewDetach` ([9bd000f](https://github.com/hat0uma/csvview.nvim/commit/9bd000f338bf020ed4791c95af023c1e14029236))
+
 ## [1.1.0](https://github.com/hat0uma/csvview.nvim/compare/v1.0.0...v1.1.0) (2025-03-17)
 
 
