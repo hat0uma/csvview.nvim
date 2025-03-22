@@ -11,7 +11,13 @@ local M = {}
 ---@field min_column_width? integer
 ---@field spacing? integer
 ---@field display_mode? CsvView.Options.View.DisplayMode
+---@field header_lnum? integer
+---@field sticky_header? CsvView.Options.View.StickyHeader
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
+
+---@class CsvView.Options.View.StickyHeader
+---@field enabled? boolean
+---@field separator? string
 
 ---@class CsvView.Options.Keymaps
 ---@field textobject_field_inner? CsvView.Keymap
@@ -101,6 +107,24 @@ M.defaults = {
     --- :CsvViewEnable display_mode=border
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
+
+    --- The line number of the header
+    --- If this is set, the line is treated as a header. and used for sticky header feature.
+    --- see also: `view.sticky_header`
+    --- @type integer?
+    header_lnum = nil,
+
+    --- The sticky header feature settings
+    --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
+    sticky_header = {
+      --- Whether to enable the sticky header feature
+      --- @type boolean
+      enabled = true,
+
+      --- The separator character for the sticky header window
+      --- @type string?
+      separator = "─",
+    },
   },
 
   --- Keymaps for csvview.

@@ -16,6 +16,14 @@ end
 ---@param bufnr integer
 ---@return integer?
 function M.get_win(bufnr)
+  -- Prefer current window
+  local current_win = vim.api.nvim_get_current_win()
+  local current_buf = vim.api.nvim_win_get_buf(current_win)
+  if current_buf == bufnr then
+    return current_win
+  end
+
+  -- Find window
   for _, winid in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
       return winid

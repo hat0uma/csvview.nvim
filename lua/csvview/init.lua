@@ -5,6 +5,7 @@ local get_view = require("csvview.view").get
 local attach_view = require("csvview.view").attach
 local detach_view = require("csvview.view").detach
 local setup_view = require("csvview.view").setup
+local sticky_header = require("csvview.sticky_header")
 
 local CsvViewMetrics = require("csvview.metrics")
 local buf = require("csvview.buf")
@@ -138,6 +139,7 @@ end
 function M.setup(opts)
   config.setup(opts)
   setup_view()
+  sticky_header.setup()
 end
 
 return M
