@@ -147,14 +147,17 @@ lua require('csvview').setup()
     --- The display method of the delimiter
     --- "highlight" highlights the delimiter
     --- "border" displays the delimiter with `│`
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable display_mode=border
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
 
     --- The line number of the header
     --- If this is set, the line is treated as a header. and used for sticky header feature.
     --- see also: `view.sticky_header`
-    --- @type integer?
-    header_lnum = nil,
+    --- @type integer|false
+    header_lnum = false,
 
     --- The sticky header feature settings
     --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
@@ -164,7 +167,8 @@ lua require('csvview').setup()
       enabled = true,
 
       --- The separator character for the sticky header window
-      --- @type string?
+      --- set `false` to disable the separator
+      --- @type string|false
       separator = "─",
     },
   },
