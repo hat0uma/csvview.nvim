@@ -26,6 +26,13 @@ local function get_statuscolumn_or_default(winid)
   end
 
   -- default
+  if vim.fn.has("nvim-0.11") ~= 1 then
+    -- below neovim 0.11
+    -- https://github.com/neovim/neovim/pull/29357
+    local relnum = vim.api.nvim_get_option_value("relativenumber", { win = winid, scope = "local" }) ---@type boolean
+    return relnum and "%C%=%s%=%r " or "%C%=%s%=%l "
+  end
+
   return "%C%=%s%=%l "
 end
 
@@ -48,7 +55,7 @@ local function format_to_stc_string(eval_result)
     local segment = string.sub(text, start_index + 1, end_index)
 
     -- Use the last highlight group
-    local groups = hl.groups or {}
+    local groups = hl.groups or { hl.group } -- fallback to hl.group for compatibility
     local group_name = #groups > 0 and groups[#groups] or "Normal"
 
     -- %#…# to start highlight, %* to end highlight

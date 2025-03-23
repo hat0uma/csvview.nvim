@@ -91,10 +91,7 @@ describe("sticky_header", function()
       name = "computes the correct gutter column when statuscolumn is set",
       winview = { topline = 10, lnum = 15, col = 2 },
       winopts = {
-        { "number", true },
-        { "numberwidth", 4 },
-        { "relativenumber", false },
-        { "statuscolumn", "abc%ldef" },
+        { "statuscolumn", "abc%{v:lnum}def" },
       },
       opts = { view = { sticky_header = { enabled = true, separator = false }, header_lnum = 5 } },
       assert = function(case)
@@ -109,7 +106,7 @@ describe("sticky_header", function()
           fillchar = " ",
         })
 
-        local expected = string.format("abc%" .. vim.wo[winid].numberwidth - 1 .. "ddef", case.opts.view.header_lnum)
+        local expected = string.format("abc%ddef", case.opts.view.header_lnum)
         assert.are.equal(expected, e.str)
       end,
     },
