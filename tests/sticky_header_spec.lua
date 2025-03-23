@@ -106,6 +106,7 @@ describe("sticky_header", function()
         local e = vim.api.nvim_eval_statusline(statuscolumn, {
           winid = winid,
           use_statuscol_lnum = case.opts.view.header_lnum,
+          fillchar = " ",
         })
 
         local expected = string.format("abc%" .. vim.wo[winid].numberwidth - 1 .. "ddef", case.opts.view.header_lnum)
@@ -133,6 +134,7 @@ describe("sticky_header", function()
         local e = vim.api.nvim_eval_statusline(statuscolumn, {
           winid = winid,
           use_statuscol_lnum = case.opts.view.header_lnum,
+          fillchar = " ",
         })
 
         -- relativenumber is calculated based on the current cursor position
