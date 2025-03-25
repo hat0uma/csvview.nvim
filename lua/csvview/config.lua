@@ -11,7 +11,13 @@ local M = {}
 ---@field min_column_width? integer
 ---@field spacing? integer
 ---@field display_mode? CsvView.Options.View.DisplayMode
+---@field header_lnum? integer|false
+---@field sticky_header? CsvView.Options.View.StickyHeader
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
+
+---@class CsvView.Options.View.StickyHeader
+---@field enabled? boolean
+---@field separator? string|false
 
 ---@class CsvView.Options.Keymaps
 ---@field textobject_field_inner? CsvView.Keymap
@@ -44,6 +50,7 @@ M.defaults = {
 
     --- The delimiter character
     --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
+    --- Currently, only fixed-length strings are supported. Regular expressions such as \s+ are not supported.
     --- e.g:
     ---  delimiter = ","
     ---  delimiter = function(bufnr) return "," end
@@ -101,6 +108,25 @@ M.defaults = {
     --- :CsvViewEnable display_mode=border
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
+
+    --- The line number of the header
+    --- If this is set, the line is treated as a header. and used for sticky header feature.
+    --- see also: `view.sticky_header`
+    --- @type integer|false
+    header_lnum = false,
+
+    --- The sticky header feature settings
+    --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
+    sticky_header = {
+      --- Whether to enable the sticky header feature
+      --- @type boolean
+      enabled = true,
+
+      --- The separator character for the sticky header window
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = "─",
+    },
   },
 
   --- Keymaps for csvview.

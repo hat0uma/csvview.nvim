@@ -2,7 +2,9 @@
 
 A comfortable CSV/TSV editing plugin for Neovim.
 
-![csvview](https://github.com/hat0uma/csvview.nvim/assets/55551571/27130f41-98f5-445d-a9eb-643b31e0b96b)
+<div align="center">
+  <video controls src="https://github.com/user-attachments/assets/f529b978-9ae4-4413-b73a-f0fa431c900d"></video>
+</div>
 
 ## ✨ Features
 
@@ -11,6 +13,7 @@ A comfortable CSV/TSV editing plugin for Neovim.
 - **Asynchronous Parsing**: Smoothly handles large CSV files without blocking.
 - **Text Objects & Motions**: Conveniently select fields or move across fields/rows.
 - **Comment Ignoring**: Skips specified comment lines from the table display.
+- **Sticky Header**: Keeps the header row visible while scrolling.
 - **Flexible Settings**: Customizable delimiter and comment prefix.
 - **Two Display Modes**:
   - `highlight`: Highlights delimiters.
@@ -91,6 +94,7 @@ lua require('csvview').setup()
 
     --- The delimiter character
     --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
+    --- Currently, only fixed-length strings are supported. Regular expressions such as \s+ are not supported.
     --- e.g:
     ---  delimiter = ","
     ---  delimiter = function(bufnr) return "," end
@@ -143,8 +147,30 @@ lua require('csvview').setup()
     --- The display method of the delimiter
     --- "highlight" highlights the delimiter
     --- "border" displays the delimiter with `│`
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable display_mode=border
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
+
+    --- The line number of the header
+    --- If this is set, the line is treated as a header. and used for sticky header feature.
+    --- see also: `view.sticky_header`
+    --- @type integer|false
+    header_lnum = false,
+
+    --- The sticky header feature settings
+    --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
+    sticky_header = {
+      --- Whether to enable the sticky header feature
+      --- @type boolean
+      enabled = true,
+
+      --- The separator character for the sticky header window
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = "─",
+    },
   },
 
   --- Keymaps for csvview.
@@ -176,78 +202,7 @@ lua require('csvview').setup()
   --- Actions for keymaps.
   ---@type CsvView.Options.Actions
   actions = {
-    textobject_field_inner = {
-      function()
-        require("csvview.textobject").field(0, { include_delimiter = false })
-      end,
-      desc = "[csvview] Select the current field",
-      noremap = true,
-      silent = true,
-    },
-    textobject_field_outer = {
-      function()
-        require("csvview.textobject").field(0, { include_delimiter = true })
-      end,
-      desc = "[csvview] Select the current field with delimiter",
-      noremap = true,
-      silent = true,
-    },
-    jump_next_field_start = {
-      function()
-        for _ = 1, vim.v.count1 do
-          require("csvview.jump").next_field_start()
-        end
-      end,
-      desc = "[csvview] Jump to the next start of the field",
-      noremap = true,
-      silent = true,
-    },
-    jump_prev_field_start = {
-      function()
-        for _ = 1, vim.v.count1 do
-          require("csvview.jump").prev_field_start()
-        end
-      end,
-      desc = "[csvview] Jump to the previous start of the field",
-      noremap = true,
-      silent = true,
-    },
-    jump_next_field_end = {
-      function()
-        for _ = 1, vim.v.count1 do
-          require("csvview.jump").next_field_end()
-        end
-      end,
-      desc = "[csvview] Jump to the next end of the field",
-      noremap = true,
-      silent = true,
-    },
-    jump_prev_field_end = {
-      function()
-        for _ = 1, vim.v.count1 do
-          require("csvview.jump").prev_field_end()
-        end
-      end,
-      desc = "[csvview] Jump to the previous end of the field",
-      noremap = true,
-      silent = true,
-    },
-    jump_next_row = {
-      function()
-        require("csvview.jump").field(0, { pos = { vim.v.count1, 0 }, anchor = "end" })
-      end,
-      desc = "[csvview] Jump to the next row",
-      noremap = true,
-      silent = true,
-    },
-    jump_prev_row = {
-      function()
-        require("csvview.jump").field(0, { pos = { -vim.v.count1, 0 }, anchor = "end" })
-      end,
-      desc = "[csvview] Jump to the previous row",
-      noremap = true,
-      silent = true,
-    },
+    -- See lua/csvview/config.lua
   },
 }
 ```
@@ -265,6 +220,23 @@ After opening a CSV file, use the following commands to interact with the plugin
 | `:CsvViewEnable [options]` | Enable CSV view with the specified options.      |
 | `:CsvViewDisable`          | Disable CSV view.                                |
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options.      |
+
+#### Command Options
+
+- **`delimiter`** (string):  
+  Specifies the field delimiter character. See `options.parser.delimiter`.
+
+- **`quote_char`** (string):  
+  The quote character for enclosing fields. See `options.parser.quote_char`.
+
+- **`comment`** (string):  
+  The comment prefix character. See `options.parser.comments`.
+
+- **`display_mode`** (string):  
+  Method for displaying delimiters. Possible values are `highlight` and `border`. See `options.view.display_mode`.
+
+- **`header_lnum`** (number):  
+  Line number (1-based) to treat as a header. If set, that line remains “sticky” at the top when scrolling. See `options.view.header_lnum`.
 
 ### Example
 
@@ -372,10 +344,11 @@ vim.api.nvim_create_autocmd("User", {
 
 ## 🌈 Highlights
 
-| Group                | Default            | Description         |
-| -------------------- | ------------------ | ------------------- |
-| **CsvViewDelimiter** | link to `Comment`  | used for `,`        |
-| **CsvViewComment**   | link to `Comment`  | used for comment    |
+| Group                            | Default                    | Description                      |
+| -------------------------------- | -------------------------- | -------------------------------- |
+| **CsvViewDelimiter**             | link to `Comment`          | used for `,`                     |
+| **CsvViewComment**               | link to `Comment`          | used for comment                 |
+| **CsvViewStickyHeaderSeparator** | link to `CsvViewDelimiter` | used for sticky header separator |
 
 > [!NOTE]
 > For field highlighting, this plugin utilizes the `csvCol0` ~ `csvCol8` highlight groups that are used by Neovim's built-in CSV syntax highlighting.
@@ -400,3 +373,7 @@ Contributions are welcome! Please open an issue or submit a pull request on GitH
 ## 📄 License
 
 Distributed under the MIT License.
+
+## 👏 Acknowledgements
+
+- [nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context) for inspiration of the sticky-header feature.

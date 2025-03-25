@@ -35,6 +35,18 @@ local cmdline = Cmdline:new({
     end,
     candidates = { "highlight", "border" },
   },
+  {
+    name = "header_lnum",
+    ---@param options CsvView.Options
+    ---@param value string
+    set = function(options, value)
+      if value == "false" then
+        options.view.header_lnum = false
+      else
+        options.view.header_lnum = tonumber(value)
+      end
+    end,
+  },
 })
 
 local function create_empty_opts()
