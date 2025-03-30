@@ -236,6 +236,26 @@ M.defaults = {
 ---@diagnostic disable-next-line: missing-fields
 M.options = {}
 
+---@type { name: string, link?: string }[]
+M._highlights = {
+  { name = "CsvViewDelimiter", link = "Delimiter" },
+  { name = "CsvViewComment", link = "Comment" },
+  { name = "CsvViewStickyHeaderSeparator", link = "Delimiter" },
+  { name = "CsvViewHeader", link = nil },
+  -- use built-in csv syntax highlight group.
+  -- csvCol0 ~ csvCol8
+  -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
+  { name = "CsvViewCol0", link = "csvCol0" },
+  { name = "CsvViewCol1", link = "csvCol1" },
+  { name = "CsvViewCol2", link = "csvCol2" },
+  { name = "CsvViewCol3", link = "csvCol3" },
+  { name = "CsvViewCol4", link = "csvCol4" },
+  { name = "CsvViewCol5", link = "csvCol5" },
+  { name = "CsvViewCol6", link = "csvCol6" },
+  { name = "CsvViewCol7", link = "csvCol7" },
+  { name = "CsvViewCol8", link = "csvCol8" },
+}
+
 --- get config
 ---@param opts? CsvView.Options
 ---@return CsvView.InternalOptions
@@ -246,15 +266,9 @@ end
 --- setup
 ---@param opts? CsvView.Options
 function M.setup(opts)
-  local highlight_links = {
-    CsvViewDelimiter = "Comment",
-    CsvViewComment = "Comment",
-    CsvViewStickyHeaderSeparator = "CsvViewDelimiter",
-  }
-
-  -- set highlight links
-  for group, link in pairs(highlight_links) do
-    vim.api.nvim_set_hl(0, group, { link = link, default = true })
+  -- Set colors
+  for _, hl in ipairs(M._highlights) do
+    vim.api.nvim_set_hl(0, hl.name, { link = hl.link, default = true })
   end
 
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})

@@ -178,14 +178,20 @@ end
 ---@param offset integer 0-indexed byte offset
 ---@param field CsvView.Metrics.Field
 function View:_highlight_field(lnum, column_index, offset, field)
-  -- use built-in csv syntax highlight group.
-  -- csvCol0 ~ csvCol8
-  -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
-  local hl_group = "csvCol" .. (column_index - 1) % 9
+  -- highlight field
   self:_add_extmark(lnum, offset, {
-    hl_group = hl_group,
+    hl_group = "CsvViewCol" .. (column_index - 1) % 9,
     end_col = offset + field.len,
   })
+
+  -- highlight header
+  -- The array format of hl_group is not supported in neovim 0.10, so the header line highlight is separate.
+  if lnum == self.opts.view.header_lnum then
+    self:_add_extmark(lnum, offset, {
+      hl_group = "CsvViewHeader",
+      end_col = offset + field.len,
+    })
+  end
 end
 
 --- Render field in line
