@@ -246,6 +246,17 @@ end
 --- setup
 ---@param opts? CsvView.Options
 function M.setup(opts)
+  local highlight_links = {
+    CsvViewDelimiter = "Comment",
+    CsvViewComment = "Comment",
+    CsvViewStickyHeaderSeparator = "CsvViewDelimiter",
+  }
+
+  -- set highlight links
+  for group, link in pairs(highlight_links) do
+    vim.api.nvim_set_hl(0, group, { link = link, default = true })
+  end
+
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 end
 
