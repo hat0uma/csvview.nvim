@@ -3,16 +3,6 @@ local buf = require("csvview.buf")
 local config = require("csvview.config")
 local errors = require("csvview.errors")
 
---- Get eol column.
---- Must have the buffer open in the current tab page.
----@param bufnr integer buffer number
----@param lnum integer 1-indexed lnum
----@return integer 0-indexed column
-local function get_eol_col(bufnr, lnum)
-  ---@diagnostic disable-next-line: assign-type-mismatch
-  return vim.fn.col({ lnum, "$" }, vim.fn.bufwinid(bufnr)) - 1
-end
-
 --- @class CsvView.View
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
@@ -166,10 +156,7 @@ end
 --- highlight comment line
 ---@param lnum integer 1-indexed lnum
 function View:_highlight_comment(lnum)
-  self:_add_extmark(lnum, 0, {
-    hl_group = "CsvViewComment",
-    end_col = get_eol_col(self.bufnr, lnum),
-  })
+  self:_add_extmark(lnum, 0, { hl_group = "CsvViewComment", end_row = lnum, hl_eol = true })
 end
 
 --- highlight field
