@@ -93,17 +93,24 @@ function M.enable(bufnr, opts)
     buffer = bufnr,
   })
 
+  local orig_syntax = vim.bo[bufnr].syntax
+
   -- Register detach callback
   on_detach = function()
     vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
     detach_bufevent_handle()
     metrics:clear()
     keymap.unregister(opts)
+    vim.bo[bufnr].syntax = orig_syntax
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
 
   -- Calculate metrics and attach view.
   metrics:compute_buffer(function()
+    -- disable builtin syntax highlighting.
+    -- NOTE: This is necessary to prevent syntax highlighting from interfering with the custom highlighting of the view.
+    vim.bo[bufnr].syntax = ""
+
     attach_view(bufnr, view)
     keymap.register(opts)
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
