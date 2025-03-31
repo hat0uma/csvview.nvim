@@ -350,7 +350,7 @@ vim.api.nvim_create_autocmd("User", {
 | **CsvViewComment**               | link to `Comment`          | used for comment                 |
 | **CsvViewStickyHeaderSeparator** | link to `CsvViewDelimiter` | used for sticky header separator |
 | **CsvViewHeaderLine**            | -                          | used for header highlighting     |
-| **CsvViewCol0** ~ **CsvViewCol8**| link to `csvCol0` ~ `csvCol8` | used for field highlighting   |
+| **CsvViewCol0** to **CsvViewCol8**| link to `csvCol0` to `csvCol8` | used for field highlighting   |
 
 ## 📝 TODO
 
