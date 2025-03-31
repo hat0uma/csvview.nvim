@@ -269,6 +269,26 @@ function M.setup(opts)
     vim.api.nvim_set_hl(0, hl.name, { link = hl.link, default = true })
   end
 
+  if vim.fn.has("nvim-0.11") ~= 1 then
+    -- fallback for nvim < 0.11
+    -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
+    local fallback_highlights = {
+      csvCol1 = "Statement",
+      csvCol2 = "Constant",
+      csvCol3 = "Type",
+      csvCol4 = "PreProc",
+      csvCol5 = "Identifier",
+      csvCol6 = "Special",
+      csvCol7 = "String",
+      csvCol8 = "Comment",
+    }
+    for name, link in pairs(fallback_highlights) do
+      if vim.tbl_isempty(vim.api.nvim_get_hl(0, { name = name })) then
+        vim.api.nvim_set_hl(0, name, { link = link, default = true })
+      end
+    end
+  end
+
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 end
 
