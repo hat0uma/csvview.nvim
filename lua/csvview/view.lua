@@ -3,15 +3,6 @@ local buf = require("csvview.buf")
 local config = require("csvview.config")
 local errors = require("csvview.errors")
 
---- Get end column of line
----@param winid integer window id
----@param lnum integer 1-indexed lnum
----@return integer 0-indexed column
-local function end_col(winid, lnum)
-  ---@diagnostic disable-next-line: assign-type-mismatch
-  return vim.fn.col({ lnum, "$" }, winid) - 1
-end
-
 --- @class CsvView.View
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
@@ -42,125 +33,41 @@ function View:new(bufnr, metrics, opts, on_dispose)
   return setmetatable(obj, self)
 end
 
---- Add extmark to buffer
----@param line integer 1-based lnum
----@param col integer 0-based column
----@param opts vim.api.keyset.set_extmark
-function View:_add_extmark(line, col, opts)
-  -- Manage extmark per line
-  if not self._extmarks[line] then
-    self._extmarks[line] = {}
-  end
-
-  self._extmarks[line][#self._extmarks[line] + 1] =
-    vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, line - 1, col, opts)
-end
-
---- Align field to the left
----@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
----@param padding integer
----@param field CsvView.Metrics.Field
----@param border boolean
-function View:_align_left(lnum, offset, padding, field, border)
-  if padding > 0 then
-    self:_add_extmark(lnum, offset + field.len, {
-      virt_text = { { string.rep(" ", padding) } },
-      virt_text_pos = "inline",
-      right_gravity = true,
-    })
-  end
-
-  if not border then
+--- Render view
+---@param force? boolean force render even if locked
+function View:render(force)
+  if not force and self:is_locked() then
     return
   end
 
-  -- render border or highlight delimiter
-  if self.opts.view.display_mode == "border" then
-    self:_render_border(lnum, offset + field.len)
-  else
-    self:_highlight_delimiter(lnum, offset + field.len)
+  -- Clear previous rendering before re-render
+  self:clear()
+
+  -- Render with all window ranges
+  local wins = buf.tabpage_win_find(0, self.bufnr)
+  for _, winid in ipairs(wins) do
+    local top = vim.fn.line("w0", winid)
+    local bot = vim.fn.line("w$", winid)
+
+    self:_set_window_options(winid)
+    self:_render_lines(top, bot)
   end
 end
 
---- Align field to the right
----@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
----@param padding integer
----@param field CsvView.Metrics.Field
----@param border boolean
-function View:_align_right(lnum, offset, padding, field, border)
-  if padding > 0 then
-    self:_add_extmark(lnum, offset, {
-      virt_text = { { string.rep(" ", padding) } },
-      virt_text_pos = "inline",
-      right_gravity = false,
-    })
-  end
-
-  if not border then
-    return
-  end
-
-  -- render border or highlight delimiter
-  if self.opts.view.display_mode == "border" then
-    self:_render_border(lnum, offset + field.len)
-  else
-    self:_highlight_delimiter(lnum, offset + field.len)
-  end
+--- Lock view rendering
+function View:lock()
+  self._locked = true
 end
 
---- render column index header
----@param lnum integer 1-indexed lnum.render header above this line.
-function View:render_column_index_header(lnum)
-  local virt = {} --- @type string[][]
-  for i, column in ipairs(self.metrics.columns) do
-    local char = tostring(i)
-    virt[#virt + 1] = { string.rep(" ", column.max_width - #char + self.opts.view.spacing) }
-    virt[#virt + 1] = { char }
-    if i < #self.metrics.columns then
-      virt[#virt + 1] = { "," }
-    end
-  end
-  self:_add_extmark(lnum, 0, { virt_lines = { virt }, virt_lines_above = true })
+--- Unlock view rendering
+function View:unlock()
+  self._locked = false
 end
 
---- highlight delimiter char
----@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
-function View:_highlight_delimiter(lnum, offset)
-  self:_add_extmark(lnum, offset, { hl_group = "CsvViewDelimiter", end_col = offset + #self._delimiter })
-end
-
---- highlight comment line
----@param lnum integer 1-indexed lnum
----@param winid integer window id
-function View:_highlight_comment(lnum, winid)
-  self:_add_extmark(lnum, 0, { hl_group = "CsvViewComment", end_col = end_col(winid, lnum) })
-end
-
---- highlight field
----@param lnum integer 1-indexed lnum
----@param column_index integer 1-indexed column index
----@param offset integer 0-indexed byte offset
----@param field CsvView.Metrics.Field
-function View:_highlight_field(lnum, column_index, offset, field)
-  -- use built-in csv syntax highlight group.
-  -- csvCol0 ~ csvCol8
-  -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
-  local hl_group = "csvCol" .. (column_index - 1) % 9
-  self:_add_extmark(lnum, offset, { hl_group = hl_group, end_col = offset + field.len })
-end
-
---- render table border
----@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
-function View:_render_border(lnum, offset)
-  self:_add_extmark(lnum, offset, {
-    conceal = "│",
-    end_col = offset + #self._delimiter,
-    hl_group = "CsvViewDelimiter",
-  })
+--- check if view rendering is locked
+---@return boolean
+function View:is_locked()
+  return self._locked
 end
 
 --- Clear all extmarks
@@ -181,6 +88,90 @@ function View:dispose()
   end
 end
 
+-------------------------------------------------------
+-- private methods
+-------------------------------------------------------
+
+--- Add extmark to buffer
+---@param line integer 1-based lnum
+---@param col integer 0-based column
+---@param opts vim.api.keyset.set_extmark
+function View:_add_extmark(line, col, opts)
+  -- Manage extmark per line
+  if not self._extmarks[line] then
+    self._extmarks[line] = {}
+  end
+
+  self._extmarks[line][#self._extmarks[line] + 1] =
+    vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, line - 1, col, opts)
+end
+
+--- Align field to the left
+---@param lnum integer 1-indexed lnum
+---@param offset integer 0-indexed byte offset
+---@param padding integer
+---@param field CsvView.Metrics.Field
+function View:_align_field(lnum, offset, padding, field)
+  if padding <= 0 then
+    return
+  end
+
+  local pad = { { string.rep(" ", padding) } }
+  if field.is_number then
+    -- align right
+    self:_add_extmark(lnum, offset, {
+      virt_text = pad,
+      virt_text_pos = "inline",
+      right_gravity = false,
+    })
+  else
+    -- align left
+    self:_add_extmark(lnum, offset + field.len, {
+      virt_text = pad,
+      virt_text_pos = "inline",
+      right_gravity = true,
+    })
+  end
+end
+
+--- Render delimiter char
+---@param lnum integer 1-indexed lnum
+---@param offset integer 0-indexed byte offset
+function View:_render_delimiter(lnum, offset)
+  local end_col = offset + #self._delimiter
+  if self.opts.view.display_mode == "border" then
+    self:_add_extmark(lnum, offset, {
+      hl_group = "CsvViewDelimiter",
+      end_col = end_col,
+      conceal = "│",
+    })
+  else
+    self:_add_extmark(lnum, offset, {
+      hl_group = "CsvViewDelimiter",
+      end_col = end_col,
+    })
+  end
+end
+
+--- highlight comment line
+---@param lnum integer 1-indexed lnum
+function View:_highlight_comment(lnum)
+  self:_add_extmark(lnum, 0, { hl_group = "CsvViewComment", end_row = lnum, hl_eol = true })
+end
+
+--- highlight field
+---@param lnum integer 1-indexed lnum
+---@param column_index integer 1-indexed column index
+---@param offset integer 0-indexed byte offset
+---@param field CsvView.Metrics.Field
+function View:_highlight_field(lnum, column_index, offset, field)
+  -- highlight field
+  self:_add_extmark(lnum, offset, {
+    hl_group = "CsvViewCol" .. (column_index - 1) % 9,
+    end_col = offset + field.len,
+  })
+end
+
 --- Render field in line
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
@@ -192,16 +183,15 @@ function View:_render_field(lnum, column_index, field, offset)
     return
   end
 
-  self:_highlight_field(lnum, column_index, offset, field)
-
-  -- if column is last, do not render border.
-  local render_border = column_index < #self.metrics.rows[lnum].fields
+  -- if column is last, do not render delimiter
+  local should_render_delimiter = column_index < #self.metrics.rows[lnum].fields
   local colwidth = math.max(self.metrics.columns[column_index].max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
-  if field.is_number then
-    self:_align_right(lnum, offset, padding, field, render_border)
-  else
-    self:_align_left(lnum, offset, padding, field, render_border)
+
+  self:_highlight_field(lnum, column_index, offset, field)
+  self:_align_field(lnum, offset, padding, field)
+  if should_render_delimiter then
+    self:_render_delimiter(lnum, offset + field.len)
   end
 end
 
@@ -214,8 +204,7 @@ end
 
 --- Render line
 ---@param lnum integer 1-indexed lnum
----@param winid integer window id
-function View:_render_line(lnum, winid)
+function View:_render_line(lnum)
   local line = self.metrics.rows[lnum]
   if not line then
     return
@@ -228,8 +217,13 @@ function View:_render_line(lnum, winid)
   end
 
   if line.is_comment then
-    self:_highlight_comment(lnum, winid)
+    self:_highlight_comment(lnum)
     return
+  end
+
+  -- highlight header
+  if lnum == self.opts.view.header_lnum then
+    self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 
   -- render fields
@@ -247,54 +241,38 @@ end
 --- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
 --- Therefore, it is set to be executed in the next tick using `vim.schedule_wrap()`.
 ---@type fun(self:CsvView.View, winid:integer )
-View._set_window_options = vim.schedule_wrap(function(self, winid)
-  if not vim.api.nvim_win_is_valid(winid) then
-    return
-  end
+View._set_window_options = vim.schedule_wrap(
+  --- @param self CsvView.View
+  --- @param winid integer
+  function(self, winid)
+    if not vim.api.nvim_win_is_valid(winid) then
+      return
+    end
 
-  if self.opts.view.display_mode == "border" then
-    vim.api.nvim_win_call(winid, function()
+    local function set_local(key, value)
+      if vim.api.nvim_get_option_value(key, { scope = "local", win = winid }) ~= value then
+        vim.api.nvim_set_option_value(key, value, { scope = "local", win = winid })
+      end
+    end
+
+    if self.opts.view.display_mode == "border" then
       -- Settings for conceal delimiter with border
-      vim.wo[winid][0].concealcursor = "nvic"
-      vim.wo[winid][0].conceallevel = 2
-    end)
+      set_local("concealcursor", "nvic")
+      set_local("conceallevel", 2)
+    end
   end
-end)
+)
 
---- Render view
+--- Render lines
 ---@param top_lnum integer 1-indexed
 ---@param bot_lnum integer 1-indexed
----@param winid integer window id
-function View:render(top_lnum, bot_lnum, winid)
-  -- https://github.com/neovim/neovim/issues/16166
-  -- self:render_column_index_header(top_lnum)
-
-  -- set window options for view
-  self:_set_window_options(winid)
-
-  --- render all fields in ranges
+function View:_render_lines(top_lnum, bot_lnum)
   for lnum = top_lnum, bot_lnum do
-    local ok, err = xpcall(self._render_line, errors.wrap_stacktrace, self, lnum, winid)
+    local ok, err = xpcall(self._render_line, errors.wrap_stacktrace, self, lnum)
     if not ok then
       errors.error_with_context(err, { lnum = lnum })
     end
   end
-end
-
---- Lock view rendering
-function View:lock()
-  self._locked = true
-end
-
---- Unlock view rendering
-function View:unlock()
-  self._locked = false
-end
-
---- check if view rendering is locked
----@return boolean
-function View:is_locked()
-  return self._locked
 end
 
 -------------------------------------------------------
@@ -341,47 +319,22 @@ function M.get(bufnr)
   return M._views[bufnr]
 end
 
---- Render view with window ranges
----@param bufnr integer
----@param view CsvView.View
-local function render_with_window_ranges(bufnr, view)
-  -- Do not render if locked
-  if view:is_locked() then
-    return
-  end
-
-  -- Clear last rendering
-  view:clear()
-
-  -- Render with all window ranges
-  local wins = vim.fn.win_findbuf(bufnr)
-  for _, winid in ipairs(wins) do
-    -- Get window range
-    local top = vim.fn.line("w0", winid)
-    local bot = vim.fn.line("w$", winid)
-
-    -- Render view
-    local ok, err = xpcall(view.render, errors.wrap_stacktrace, view, top, bot, winid)
+--- Render all views
+function M.render()
+  for _, view in pairs(M._views) do
+    local ok, err = xpcall(view.render, errors.wrap_stacktrace, view)
     if not ok then
       errors.print_structured_error("CsvView Rendering Stopped with Error", err)
-      M.detach(bufnr)
+      M.detach(view.bufnr)
     end
   end
 end
 
 --- setup view
 function M.setup()
-  -- set highlight
-  vim.api.nvim_set_hl(0, "CsvViewDelimiter", { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, "CsvViewComment", { link = "Comment", default = true })
-
-  -- set decorator
   vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
     on_start = function(_, _)
-      -- Render all views
-      for bufnr, view in pairs(M._views) do
-        render_with_window_ranges(bufnr, view)
-      end
+      M.render()
       return false
     end,
   })

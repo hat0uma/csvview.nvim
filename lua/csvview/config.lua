@@ -236,6 +236,24 @@ M.defaults = {
 ---@diagnostic disable-next-line: missing-fields
 M.options = {}
 
+---@type { name: string, link?: string }[]
+M._highlights = {
+  { name = "CsvViewDelimiter", link = "Delimiter" },
+  { name = "CsvViewComment", link = "Comment" },
+  { name = "CsvViewHeaderLine", link = nil },
+  { name = "CsvViewStickyHeaderSeparator", link = "Delimiter" },
+  -- use built-in csv syntax highlight group.
+  { name = "CsvViewCol0", link = "csvCol0" },
+  { name = "CsvViewCol1", link = "csvCol1" },
+  { name = "CsvViewCol2", link = "csvCol2" },
+  { name = "CsvViewCol3", link = "csvCol3" },
+  { name = "CsvViewCol4", link = "csvCol4" },
+  { name = "CsvViewCol5", link = "csvCol5" },
+  { name = "CsvViewCol6", link = "csvCol6" },
+  { name = "CsvViewCol7", link = "csvCol7" },
+  { name = "CsvViewCol8", link = "csvCol8" },
+}
+
 --- get config
 ---@param opts? CsvView.Options
 ---@return CsvView.InternalOptions
@@ -246,6 +264,31 @@ end
 --- setup
 ---@param opts? CsvView.Options
 function M.setup(opts)
+  -- Set colors
+  for _, hl in ipairs(M._highlights) do
+    vim.api.nvim_set_hl(0, hl.name, { link = hl.link, default = true })
+  end
+
+  if vim.fn.has("nvim-0.11") ~= 1 then
+    -- fallback for nvim < 0.11
+    -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
+    local fallback_highlights = {
+      csvCol1 = "Statement",
+      csvCol2 = "Constant",
+      csvCol3 = "Type",
+      csvCol4 = "PreProc",
+      csvCol5 = "Identifier",
+      csvCol6 = "Special",
+      csvCol7 = "String",
+      csvCol8 = "Comment",
+    }
+    for name, link in pairs(fallback_highlights) do
+      if vim.tbl_isempty(vim.api.nvim_get_hl(0, { name = name })) then
+        vim.api.nvim_set_hl(0, name, { link = link, default = true })
+      end
+    end
+  end
+
   M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
 end
 

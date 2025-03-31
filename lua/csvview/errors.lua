@@ -39,32 +39,28 @@ local function tbl_remove_key(tbl, key)
   return value
 end
 
+--- Format error message
+---@param err string|CsvView.Error|nil
+---@return string
+function M.format_error(err)
+  if type(err) == "table" then
+    local stacktrace = tbl_remove_key(err, "stacktrace") or "No stacktrace available"
+    local err_msg = tbl_remove_key(err, "err") or "An unspecified error occurred"
+    return string.format("Error: %s\nDetails: %s\n%s", err_msg, vim.inspect(err), stacktrace)
+  elseif type(err) == "string" then
+    return err
+  else
+    return "An unknown error occurred."
+  end
+end
+
 --- Print error message
 --- @type fun(header: string, err: string|CsvView.Error|nil)
 M.print_structured_error = vim.schedule_wrap(function(header, err)
-  --- @type string
-  local msg
-
-  if type(err) == "table" then
-    -- extract error message and stacktrace
-    local stacktrace = tbl_remove_key(err, "stacktrace") or "No stacktrace available"
-    local err_msg = tbl_remove_key(err, "err") or "An unspecified error occurred"
-
-    -- format error message
-    msg = string.format(
-      "Error: %s\nDetails: %s\n%s",
-      err_msg,
-      -- vim.inspect(err, { newline = " ", indent = "" }),
-      vim.inspect(err),
-      stacktrace --
-    )
-  elseif type(err) == "string" then
-    msg = err
-  else
-    msg = "An unknown error occurred."
-  end
-
-  vim.notify(string.format("%s\n\n%s", header, msg), vim.log.levels.ERROR, { title = "csvview.nvim" })
+  local msg = M.format_error(err)
+  vim.notify(string.format("%s\n\n%s", header, msg), vim.log.levels.ERROR, {
+    title = "csvview.nvim",
+  })
 end)
 
 return M

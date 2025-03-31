@@ -12,6 +12,21 @@ function M.resolve_bufnr(bufnr)
   end
 end
 
+--- Get buffer attached window in tabpage
+---@param tabpage integer
+---@param bufnr integer
+---@return integer[]
+function M.tabpage_win_find(tabpage, bufnr)
+  return vim.tbl_filter(
+    --- @param winid integer
+    --- @return boolean
+    function(winid)
+      return vim.api.nvim_win_get_buf(winid) == bufnr
+    end,
+    vim.api.nvim_tabpage_list_wins(tabpage)
+  )
+end
+
 --- Get buffer attached window
 ---@param bufnr integer
 ---@return integer?

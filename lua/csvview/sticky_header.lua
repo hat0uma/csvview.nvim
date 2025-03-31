@@ -90,7 +90,7 @@ local function set_sticky_header_win_options(sticky_header_winid, winid)
   vim.api.nvim_set_option_value("statuscolumn", statuscolumn, opts)
 
   -- use Normal instead of NormalFloat
-  vim.api.nvim_set_option_value("winhl", "Normal:Normal", opts)
+  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", opts)
 
   -- Copy window options from the main window to the sticky header window
   copy_win_options({
