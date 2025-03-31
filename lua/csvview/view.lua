@@ -170,15 +170,6 @@ function View:_highlight_field(lnum, column_index, offset, field)
     hl_group = "CsvViewCol" .. (column_index - 1) % 9,
     end_col = offset + field.len,
   })
-
-  -- highlight header
-  -- The array format of hl_group is not supported in neovim 0.10, so the header line highlight is separate.
-  if lnum == self.opts.view.header_lnum then
-    self:_add_extmark(lnum, offset, {
-      hl_group = "CsvViewHeader",
-      end_col = offset + field.len,
-    })
-  end
 end
 
 --- Render field in line
@@ -228,6 +219,11 @@ function View:_render_line(lnum)
   if line.is_comment then
     self:_highlight_comment(lnum)
     return
+  end
+
+  -- highlight header
+  if lnum == self.opts.view.header_lnum then
+    self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 
   -- render fields

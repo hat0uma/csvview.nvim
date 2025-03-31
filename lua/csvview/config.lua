@@ -240,11 +240,9 @@ M.options = {}
 M._highlights = {
   { name = "CsvViewDelimiter", link = "Delimiter" },
   { name = "CsvViewComment", link = "Comment" },
+  { name = "CsvViewHeaderLine", link = nil },
   { name = "CsvViewStickyHeaderSeparator", link = "Delimiter" },
-  { name = "CsvViewHeader", link = nil },
   -- use built-in csv syntax highlight group.
-  -- csvCol0 ~ csvCol8
-  -- see https://github.com/neovim/neovim/blob/master/runtime/syntax/csv.vim
   { name = "CsvViewCol0", link = "csvCol0" },
   { name = "CsvViewCol1", link = "csvCol1" },
   { name = "CsvViewCol2", link = "csvCol2" },
