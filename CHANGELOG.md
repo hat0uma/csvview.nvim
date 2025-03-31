@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/hat0uma/csvview.nvim/compare/v1.1.0...v1.2.0) (2025-03-31)
+
+
+### Features
+
+* **view:** add custom highlight groups ([#42](https://github.com/hat0uma/csvview.nvim/issues/42)) ([5ee3a76](https://github.com/hat0uma/csvview.nvim/commit/5ee3a76c9e7e06545378077223d3ef0871259d0a))
+* **view:** Support sticky header ([#39](https://github.com/hat0uma/csvview.nvim/issues/39)) ([7dcb6aa](https://github.com/hat0uma/csvview.nvim/commit/7dcb6aa2965a1d5555d4940ed0c9c2f0e173ecdb))
+
+
+### Bug Fixes
+
+* add bufnr to `CsvViewAttach`,`CsvViewDetach` ([9bd000f](https://github.com/hat0uma/csvview.nvim/commit/9bd000f338bf020ed4791c95af023c1e14029236))
+
 ## [1.1.0](https://github.com/hat0uma/csvview.nvim/compare/v1.0.0...v1.1.0) (2025-03-17)
 
 
