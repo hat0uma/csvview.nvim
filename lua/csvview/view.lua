@@ -3,6 +3,24 @@ local buf = require("csvview.buf")
 local config = require("csvview.config")
 local errors = require("csvview.errors")
 
+--- Set local option for window
+--- It is set to be executed in the next tick.
+---@param winid integer
+---@param key string
+---@param value any
+local function set_local_deferred(winid, key, value)
+  local old_value = vim.api.nvim_get_option_value(key, { scope = "local", win = winid })
+  if old_value == value then
+    return
+  end
+
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(winid) then
+      vim.api.nvim_set_option_value(key, value, { scope = "local", win = winid })
+    end
+  end)
+end
+
 --- @class CsvView.View
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
@@ -238,30 +256,17 @@ function View:_render_line(lnum)
 end
 
 --- Set window options for view
---- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
---- Therefore, it is set to be executed in the next tick using `vim.schedule_wrap()`.
----@type fun(self:CsvView.View, winid:integer )
-View._set_window_options = vim.schedule_wrap(
-  --- @param self CsvView.View
-  --- @param winid integer
-  function(self, winid)
-    if not vim.api.nvim_win_is_valid(winid) then
-      return
-    end
-
-    local function set_local(key, value)
-      if vim.api.nvim_get_option_value(key, { scope = "local", win = winid }) ~= value then
-        vim.api.nvim_set_option_value(key, value, { scope = "local", win = winid })
-      end
-    end
-
-    if self.opts.view.display_mode == "border" then
-      -- Settings for conceal delimiter with border
-      set_local("concealcursor", "nvic")
-      set_local("conceallevel", 2)
-    end
+--- @param winid integer
+function View:_set_window_options(winid)
+  --- This function is intended to be called inside nvim_set_decoration_provider().
+  --- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
+  --- So, defer the setting of the value until the next tick.
+  if self.opts.view.display_mode == "border" then
+    -- Settings for conceal delimiter with border
+    set_local_deferred(winid, "concealcursor", "nvic")
+    set_local_deferred(winid, "conceallevel", 2)
   end
-)
+end
 
 --- Render lines
 ---@param top_lnum integer 1-indexed
