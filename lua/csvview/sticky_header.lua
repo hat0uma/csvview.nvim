@@ -255,9 +255,6 @@ end
 
 --- Setup the sticky header feature.
 function M.setup()
-  -- Highlights
-  vim.api.nvim_set_hl(0, "CsvViewStickyHeaderSeparator", { link = "CsvViewDelimiter", default = true })
-
   -- Autocommands
   local group = vim.api.nvim_create_augroup("csvview.sticky_header", {})
   vim.api.nvim_create_autocmd({
@@ -280,14 +277,6 @@ function M.setup()
       "foldcolumn",
     },
     callback = M.redraw,
-    group = group,
-  })
-  vim.api.nvim_create_autocmd("User", {
-    pattern = {
-      "CsvViewAttach",
-      "CsvViewDetach",
-    },
-    callback = vim.schedule_wrap(M.redraw),
     group = group,
   })
 

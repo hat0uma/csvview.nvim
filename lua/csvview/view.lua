@@ -238,30 +238,20 @@ function View:_render_line(lnum)
 end
 
 --- Set window options for view
---- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
---- Therefore, it is set to be executed in the next tick using `vim.schedule_wrap()`.
----@type fun(self:CsvView.View, winid:integer )
-View._set_window_options = vim.schedule_wrap(
-  --- @param self CsvView.View
-  --- @param winid integer
-  function(self, winid)
-    if not vim.api.nvim_win_is_valid(winid) then
-      return
-    end
-
-    local function set_local(key, value)
-      if vim.api.nvim_get_option_value(key, { scope = "local", win = winid }) ~= value then
-        vim.api.nvim_set_option_value(key, value, { scope = "local", win = winid })
-      end
-    end
-
-    if self.opts.view.display_mode == "border" then
-      -- Settings for conceal delimiter with border
-      set_local("concealcursor", "nvic")
-      set_local("conceallevel", 2)
+--- @param winid integer
+function View:_set_window_options(winid)
+  local function set_local(key, value) ---@type fun(key:string, value:any)
+    local opts = { scope = "local", win = winid }
+    if vim.api.nvim_get_option_value(key, opts) ~= value then
+      vim.api.nvim_set_option_value(key, value, opts)
     end
   end
-)
+
+  if self.opts.view.display_mode == "border" then
+    set_local("concealcursor", "nvic")
+    set_local("conceallevel", 2)
+  end
+end
 
 --- Render lines
 ---@param top_lnum integer 1-indexed
@@ -294,7 +284,6 @@ function M.attach(bufnr, view)
     return
   end
   M._views[bufnr] = view
-  vim.cmd([[redraw!]])
 end
 
 --- detach view for buffer
@@ -328,16 +317,6 @@ function M.render()
       M.detach(view.bufnr)
     end
   end
-end
-
---- setup view
-function M.setup()
-  vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
-    on_start = function(_, _)
-      M.render()
-      return false
-    end,
-  })
 end
 
 M.View = View

@@ -1,11 +1,8 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
-local get_view = require("csvview.view").get
-local attach_view = require("csvview.view").attach
-local detach_view = require("csvview.view").detach
-local setup_view = require("csvview.view").setup
 local sticky_header = require("csvview.sticky_header")
+local views = require("csvview.view")
 
 local CsvViewMetrics = require("csvview.metrics")
 local buf = require("csvview.buf")
@@ -17,7 +14,7 @@ local keymap = require("csvview.keymap")
 ---@return boolean
 function M.is_enabled(bufnr)
   bufnr = buf.resolve_bufnr(bufnr)
-  return get_view(bufnr) ~= nil
+  return views.get(bufnr) ~= nil
 end
 
 --- enable csv table view
@@ -60,10 +57,15 @@ function M.enable(bufnr, opts)
       else
         -- Handle normal buffer update events
         -- TODO: Process the case where the next update comes before the current update is completed
-        view:clear()
-        view:lock()
         metrics:update(first, last, last_updated, function()
-          view:unlock()
+          view:render()
+
+          -- Re-render the view in next event loop
+          -- NOTE: This is a workaround for the problem that when nvim_buf_attach's `on_lines` is triggered by `undo`,
+          -- calling `nvim_buf_set_extmark` sets the extmark to the position before undo.
+          vim.schedule(function()
+            view:render()
+          end)
         end)
       end
     end,
@@ -101,6 +103,7 @@ function M.enable(bufnr, opts)
     detach_bufevent_handle()
     metrics:clear()
     keymap.unregister(opts)
+    sticky_header.redraw()
     vim.bo[bufnr].syntax = orig_syntax
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
@@ -111,8 +114,10 @@ function M.enable(bufnr, opts)
     -- NOTE: This is necessary to prevent syntax highlighting from interfering with the custom highlighting of the view.
     vim.bo[bufnr].syntax = ""
 
-    attach_view(bufnr, view)
     keymap.register(opts)
+    views.attach(bufnr, view)
+    sticky_header.redraw()
+    view:render()
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
 end
@@ -126,7 +131,7 @@ function M.disable(bufnr)
     return
   end
 
-  detach_view(bufnr)
+  views.detach(bufnr)
 end
 
 --- toggle csv table view
@@ -145,8 +150,18 @@ end
 ---@param opts CsvView.Options?
 function M.setup(opts)
   config.setup(opts)
-  setup_view()
   sticky_header.setup()
+
+  local group = vim.api.nvim_create_augroup("csvview.view", {})
+  vim.api.nvim_create_autocmd({
+    "WinEnter",
+    "WinScrolled",
+    "WinResized",
+    "VimResized",
+  }, {
+    callback = views.render,
+    group = group,
+  })
 end
 
 return M
