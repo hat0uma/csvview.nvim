@@ -3,24 +3,6 @@ local buf = require("csvview.buf")
 local config = require("csvview.config")
 local errors = require("csvview.errors")
 
---- Set local option for window
---- It is set to be executed in the next tick.
----@param winid integer
----@param key string
----@param value any
-local function set_local_deferred(winid, key, value)
-  local old_value = vim.api.nvim_get_option_value(key, { scope = "local", win = winid })
-  if old_value == value then
-    return
-  end
-
-  vim.schedule(function()
-    if vim.api.nvim_win_is_valid(winid) then
-      vim.api.nvim_set_option_value(key, value, { scope = "local", win = winid })
-    end
-  end)
-end
-
 --- @class CsvView.View
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
@@ -258,13 +240,16 @@ end
 --- Set window options for view
 --- @param winid integer
 function View:_set_window_options(winid)
-  --- This function is intended to be called inside nvim_set_decoration_provider().
-  --- `:h nvim_set_decoration_provider()` says that setting options inside the callback can lead to unexpected results.
-  --- So, defer the setting of the value until the next tick.
+  local function set_local(key, value) ---@type fun(key:string, value:any)
+    local opts = { scope = "local", win = winid }
+    if vim.api.nvim_get_option_value(key, opts) ~= value then
+      vim.api.nvim_set_option_value(key, value, opts)
+    end
+  end
+
   if self.opts.view.display_mode == "border" then
-    -- Settings for conceal delimiter with border
-    set_local_deferred(winid, "concealcursor", "nvic")
-    set_local_deferred(winid, "conceallevel", 2)
+    set_local("concealcursor", "nvic")
+    set_local("conceallevel", 2)
   end
 end
 
@@ -299,7 +284,6 @@ function M.attach(bufnr, view)
     return
   end
   M._views[bufnr] = view
-  vim.cmd([[redraw!]])
 end
 
 --- detach view for buffer
@@ -333,16 +317,6 @@ function M.render()
       M.detach(view.bufnr)
     end
   end
-end
-
---- setup view
-function M.setup()
-  vim.api.nvim_set_decoration_provider(EXTMARK_NS, {
-    on_start = function(_, _)
-      M.render()
-      return false
-    end,
-  })
 end
 
 M.View = View
