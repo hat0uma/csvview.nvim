@@ -1,6 +1,7 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
+local errors = require("csvview.errors")
 local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
@@ -51,21 +52,17 @@ function M.enable(bufnr, opts)
         vim.api.nvim_create_autocmd("CmdlineLeave", {
           callback = function()
             view:unlock()
+            view:clear()
           end,
           once = true,
         })
       else
         -- Handle normal buffer update events
         -- TODO: Process the case where the next update comes before the current update is completed
+        view:lock()
         metrics:update(first, last, last_updated, function()
-          view:render()
-
-          -- Re-render the view in next event loop
-          -- NOTE: This is a workaround for the problem that when nvim_buf_attach's `on_lines` is triggered by `undo`,
-          -- calling `nvim_buf_set_extmark` sets the extmark to the position before undo.
-          vim.schedule(function()
-            view:render()
-          end)
+          view:unlock()
+          view:clear()
         end)
       end
     end,
@@ -80,26 +77,10 @@ function M.enable(bufnr, opts)
     end,
   })
 
-  -- Define augroup
-  -- Disable csvview when buffer is unloaded
-  local group = vim.api.nvim_create_augroup("csvview", { clear = false })
-  vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
-  vim.api.nvim_create_autocmd("BufUnload", {
-    callback = function()
-      if M.is_enabled(bufnr) then
-        M.disable(bufnr)
-      end
-    end,
-    group = group,
-    desc = "csvview: disable when buffer is unloaded",
-    buffer = bufnr,
-  })
-
   local orig_syntax = vim.bo[bufnr].syntax
 
   -- Register detach callback
   on_detach = function()
-    vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
     detach_bufevent_handle()
     metrics:clear()
     keymap.unregister(opts)
@@ -117,7 +98,6 @@ function M.enable(bufnr, opts)
     keymap.register(opts)
     views.attach(bufnr, view)
     sticky_header.redraw()
-    view:render()
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
 end
@@ -146,22 +126,69 @@ function M.toggle(bufnr, opts)
   end
 end
 
+--- Register autocmds
+---@param autocmds { event: string|string[], pattern?: string|string[], callback: fun(args: vim.api.keyset.create_autocmd.callback_args) }[]
+---@param group string|integer
+local function register_autocmds(autocmds, group)
+  for _, au in ipairs(autocmds) do
+    vim.api.nvim_create_autocmd(au.event, { group = group, pattern = au.pattern, callback = au.callback })
+  end
+end
+
 --- setup
 ---@param opts CsvView.Options?
 function M.setup(opts)
+  -- Set default options
   config.setup(opts)
-  sticky_header.setup()
 
-  local group = vim.api.nvim_create_augroup("csvview.view", {})
-  vim.api.nvim_create_autocmd({
-    "WinEnter",
-    "WinScrolled",
-    "WinResized",
-    "VimResized",
-  }, {
-    callback = views.render,
-    group = group,
+  -- Register view rendering trigger
+  local ns = vim.api.nvim_create_namespace("csvview.view")
+  vim.api.nvim_set_decoration_provider(ns, {
+    on_win = function(_, _, bufnr, toprow, botrow)
+      local view = views.get(bufnr)
+      if not view or view:is_locked() then
+        return false
+      end
+
+      local ok, err = xpcall(view.render_lines, errors.wrap_stacktrace, view, toprow + 1, botrow + 1)
+      if not ok then
+        errors.print_structured_error("CsvView Rendering Stopped with Error", err)
+        views.detach(view.bufnr)
+      end
+      return false
+    end,
   })
+
+  -- Register autocmds
+  local group = vim.api.nvim_create_augroup("csvview", {})
+  register_autocmds({
+    { -- `CursorMoved` is necessary to hide the sticky header when cursor overlaps the header.
+      event = { "WinEnter", "WinScrolled", "WinResized", "VimResized", "CursorMoved" },
+      callback = sticky_header.redraw,
+    },
+    {
+      event = "OptionSet",
+      pattern = { "number", "relativenumber", "numberwidth", "signcolumn", "foldcolumn" },
+      callback = sticky_header.redraw,
+    },
+    {
+      event = "WinClosed",
+      callback = function(args)
+        local winid = assert(tonumber(args.match))
+        sticky_header.close_if_opened(winid)
+      end,
+    },
+    { -- Detach view when the buffer is deleted
+      event = "BufUnload",
+      callback = function(args)
+        local bufnr = assert(tonumber(args.buf))
+        local view = views.get(bufnr)
+        if view then
+          views.detach(bufnr)
+        end
+      end,
+    },
+  }, group)
 end
 
 return M
