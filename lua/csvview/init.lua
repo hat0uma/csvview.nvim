@@ -98,6 +98,7 @@ function M.enable(bufnr, opts)
     keymap.register(opts)
     views.attach(bufnr, view)
     sticky_header.redraw()
+    vim.cmd([[redraw!]])
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
 end
