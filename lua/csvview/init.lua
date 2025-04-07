@@ -1,11 +1,9 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
-local get_view = require("csvview.view").get
-local attach_view = require("csvview.view").attach
-local detach_view = require("csvview.view").detach
-local setup_view = require("csvview.view").setup
+local errors = require("csvview.errors")
 local sticky_header = require("csvview.sticky_header")
+local views = require("csvview.view")
 
 local CsvViewMetrics = require("csvview.metrics")
 local buf = require("csvview.buf")
@@ -17,7 +15,7 @@ local keymap = require("csvview.keymap")
 ---@return boolean
 function M.is_enabled(bufnr)
   bufnr = buf.resolve_bufnr(bufnr)
-  return get_view(bufnr) ~= nil
+  return views.get(bufnr) ~= nil
 end
 
 --- enable csv table view
@@ -54,16 +52,17 @@ function M.enable(bufnr, opts)
         vim.api.nvim_create_autocmd("CmdlineLeave", {
           callback = function()
             view:unlock()
+            view:clear()
           end,
           once = true,
         })
       else
         -- Handle normal buffer update events
         -- TODO: Process the case where the next update comes before the current update is completed
-        view:clear()
         view:lock()
         metrics:update(first, last, last_updated, function()
           view:unlock()
+          view:clear()
         end)
       end
     end,
@@ -78,29 +77,14 @@ function M.enable(bufnr, opts)
     end,
   })
 
-  -- Define augroup
-  -- Disable csvview when buffer is unloaded
-  local group = vim.api.nvim_create_augroup("csvview", { clear = false })
-  vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
-  vim.api.nvim_create_autocmd("BufUnload", {
-    callback = function()
-      if M.is_enabled(bufnr) then
-        M.disable(bufnr)
-      end
-    end,
-    group = group,
-    desc = "csvview: disable when buffer is unloaded",
-    buffer = bufnr,
-  })
-
   local orig_syntax = vim.bo[bufnr].syntax
 
   -- Register detach callback
   on_detach = function()
-    vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
     detach_bufevent_handle()
     metrics:clear()
     keymap.unregister(opts)
+    sticky_header.redraw()
     vim.bo[bufnr].syntax = orig_syntax
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
@@ -111,8 +95,10 @@ function M.enable(bufnr, opts)
     -- NOTE: This is necessary to prevent syntax highlighting from interfering with the custom highlighting of the view.
     vim.bo[bufnr].syntax = ""
 
-    attach_view(bufnr, view)
     keymap.register(opts)
+    views.attach(bufnr, view)
+    sticky_header.redraw()
+    vim.cmd([[redraw!]])
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
 end
@@ -126,7 +112,7 @@ function M.disable(bufnr)
     return
   end
 
-  detach_view(bufnr)
+  views.detach(bufnr)
 end
 
 --- toggle csv table view
@@ -141,12 +127,69 @@ function M.toggle(bufnr, opts)
   end
 end
 
+--- Register autocmds
+---@param autocmds { event: string|string[], pattern?: string|string[], callback: fun(args: vim.api.keyset.create_autocmd.callback_args) }[]
+---@param group string|integer
+local function register_autocmds(autocmds, group)
+  for _, au in ipairs(autocmds) do
+    vim.api.nvim_create_autocmd(au.event, { group = group, pattern = au.pattern, callback = au.callback })
+  end
+end
+
 --- setup
 ---@param opts CsvView.Options?
 function M.setup(opts)
+  -- Set default options
   config.setup(opts)
-  setup_view()
-  sticky_header.setup()
+
+  -- Register view rendering trigger
+  local ns = vim.api.nvim_create_namespace("csvview.view")
+  vim.api.nvim_set_decoration_provider(ns, {
+    on_win = function(_, _, bufnr, toprow, botrow)
+      local view = views.get(bufnr)
+      if not view or view:is_locked() then
+        return false
+      end
+
+      local ok, err = xpcall(view.render_lines, errors.wrap_stacktrace, view, toprow + 1, botrow + 1)
+      if not ok then
+        errors.print_structured_error("CsvView Rendering Stopped with Error", err)
+        views.detach(view.bufnr)
+      end
+      return false
+    end,
+  })
+
+  -- Register autocmds
+  local group = vim.api.nvim_create_augroup("csvview", {})
+  register_autocmds({
+    { -- `CursorMoved` is necessary to hide the sticky header when cursor overlaps the header.
+      event = { "WinEnter", "WinScrolled", "WinResized", "VimResized", "CursorMoved" },
+      callback = sticky_header.redraw,
+    },
+    {
+      event = "OptionSet",
+      pattern = { "number", "relativenumber", "numberwidth", "signcolumn", "foldcolumn" },
+      callback = sticky_header.redraw,
+    },
+    {
+      event = "WinClosed",
+      callback = function(args)
+        local winid = assert(tonumber(args.match))
+        sticky_header.close_if_opened(winid)
+      end,
+    },
+    { -- Detach view when the buffer is deleted
+      event = "BufUnload",
+      callback = function(args)
+        local bufnr = assert(tonumber(args.buf))
+        local view = views.get(bufnr)
+        if view then
+          views.detach(bufnr)
+        end
+      end,
+    },
+  }, group)
 end
 
 return M

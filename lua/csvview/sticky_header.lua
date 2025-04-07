@@ -11,7 +11,7 @@ local function sync_horizontal_scroll(winid, header_winid, header_lnum)
   vim.api.nvim_win_call(header_winid, function()
     local current = vim.fn.winsaveview()
     if current.leftcol ~= win_view.leftcol or current.lnum ~= header_lnum then
-      vim.fn.winrestview({ lnum = header_lnum, leftcol = win_view.leftcol })
+      vim.fn.winrestview({ topline = header_lnum, lnum = header_lnum, leftcol = win_view.leftcol })
     end
   end)
 end
@@ -155,21 +155,6 @@ local function show_sticky_header(winid, view)
   set_sticky_header_win_options(sticky_header_winid, winid)
 end
 
---- Close header window
----@param winid integer
-local function close_sticky_header_win_if_opened(winid)
-  local header_win = M._sticky_header_wins[winid]
-  if not header_win then
-    return
-  end
-
-  -- Close
-  if vim.api.nvim_win_is_valid(header_win) then
-    vim.api.nvim_win_close(header_win, true)
-  end
-  M._sticky_header_wins[winid] = nil
-end
-
 --- Determine if the sticky header should be shown.
 ---@param winid integer
 ---@param view CsvView.View
@@ -221,6 +206,21 @@ local function get_opened_csvview(winid)
   return view
 end
 
+--- Close header window
+---@param winid integer
+function M.close_if_opened(winid)
+  local header_win = M._sticky_header_wins[winid]
+  if not header_win then
+    return
+  end
+
+  -- Close
+  if vim.api.nvim_win_is_valid(header_win) then
+    vim.api.nvim_win_close(header_win, true)
+  end
+  M._sticky_header_wins[winid] = nil
+end
+
 --- statuscolumn function for sticky header window.
 ---@param winid integer csvview attached window
 ---@return string statuscolumn
@@ -248,56 +248,9 @@ function M.redraw()
       show_sticky_header(winid, view)
       sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.opts.view.header_lnum)
     else
-      close_sticky_header_win_if_opened(winid)
+      M.close_if_opened(winid)
     end
   end
-end
-
---- Setup the sticky header feature.
-function M.setup()
-  -- Highlights
-  vim.api.nvim_set_hl(0, "CsvViewStickyHeaderSeparator", { link = "CsvViewDelimiter", default = true })
-
-  -- Autocommands
-  local group = vim.api.nvim_create_augroup("csvview.sticky_header", {})
-  vim.api.nvim_create_autocmd({
-    "WinScrolled",
-    "CursorMoved",
-    "BufEnter",
-    "WinEnter",
-    "VimResized",
-    "WinResized",
-  }, {
-    callback = M.redraw,
-    group = group,
-  })
-  vim.api.nvim_create_autocmd("OptionSet", {
-    pattern = {
-      "number",
-      "relativenumber",
-      "numberwidth",
-      "signcolumn",
-      "foldcolumn",
-    },
-    callback = M.redraw,
-    group = group,
-  })
-  vim.api.nvim_create_autocmd("User", {
-    pattern = {
-      "CsvViewAttach",
-      "CsvViewDetach",
-    },
-    callback = vim.schedule_wrap(M.redraw),
-    group = group,
-  })
-
-  vim.api.nvim_create_autocmd({ "WinClosed" }, {
-    callback = function(args)
-      local winid = assert(tonumber(args.match))
-      close_sticky_header_win_if_opened(winid)
-    end,
-    group = group,
-  })
 end
 
 return M
