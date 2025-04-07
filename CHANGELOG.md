@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/hat0uma/csvview.nvim/compare/v1.2.0...v1.2.1) (2025-04-07)
+
+
+### Bug Fixes
+
+* **view:** Improve rendering performance ([#44](https://github.com/hat0uma/csvview.nvim/issues/44)) ([9cc5dcb](https://github.com/hat0uma/csvview.nvim/commit/9cc5dcb060c96517d8c34b74e5b81d58529b3ea2))
+
 ## [1.2.0](https://github.com/hat0uma/csvview.nvim/compare/v1.1.0...v1.2.0) (2025-03-31)
 
 
