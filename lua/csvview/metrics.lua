@@ -8,7 +8,6 @@ local nop = function() end
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
 --- @field private _opts CsvView.InternalOptions
---- @field private _delimiter_len integer
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -37,7 +36,6 @@ function CsvViewMetrics:new(bufnr, opts)
   obj._opts = opts
   obj.rows = {}
   obj.columns = {}
-  obj._delimiter_len = #config.resolve_delimiter(opts, bufnr)
 
   return setmetatable(obj, self)
 end
@@ -142,7 +140,6 @@ end
 ---@param row_idx integer row index(1-indexed)
 ---@param byte integer byte position in the row
 ---@return integer col_idx 1-indexed column index
----@return integer offset byte offset of the column
 function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
   local row = self.rows[row_idx]
   if not row then
@@ -157,12 +154,12 @@ function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
   end
 
   for i, field in ipairs(row.fields) do
-    if byte < (field.offset + field.len + self._delimiter_len) then
-      return i, field.offset
+    if byte < field.offset then
+      return i - 1
     end
   end
 
-  return #row.fields, row.fields[#row.fields].offset
+  return #row.fields
 end
 
 --- Compute metrics

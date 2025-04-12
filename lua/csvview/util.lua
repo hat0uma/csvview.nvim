@@ -54,11 +54,11 @@ function M.get_cursor(bufnr)
   end
 
   -- Convert the byte position to a column index
-  local col_idx, offset = view.metrics:byte_to_col_idx(lnum, col_byte)
+  local col_idx = view.metrics:byte_to_col_idx(lnum, col_byte)
 
   local field = row.fields[col_idx]
-  local offset_in_field = col_byte - offset
-  local text = vim.api.nvim_buf_get_text(bufnr, lnum - 1, offset, lnum - 1, offset + field.len, {})[1]
+  local offset_in_field = col_byte - field.offset
+  local text = vim.api.nvim_buf_get_text(bufnr, lnum - 1, field.offset, lnum - 1, field.offset + field.len, {})[1]
 
   -- Determine the anchor state of the cursor within this field
   ---@type CsvView.CursorAnchor

@@ -1,6 +1,29 @@
 local M = {}
-local config = require("csvview.config")
 local errors = require("csvview.errors")
+
+--- Resolve delimiter character
+---@param opts CsvView.InternalOptions
+---@param bufnr integer
+---@return string
+local function resolve_delimiter(opts, bufnr)
+  local delim = opts.parser.delimiter
+  ---@diagnostic disable-next-line: no-unknown
+  local char
+  if type(delim) == "function" then
+    char = delim(bufnr)
+  end
+
+  if type(delim) == "table" then
+    char = delim.ft[vim.bo.filetype] or delim.default
+  end
+
+  if type(delim) == "string" then
+    char = delim
+  end
+
+  assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))
+  return char
+end
 
 ---@class CsvView.Parser.FieldInfo
 ---@field start_pos integer 1-based start position of the fields
@@ -29,7 +52,7 @@ local PARSE_STATES = {
 ---@param bufnr integer
 ---@return CsvView.Parser.DelimiterPolicy
 function M._create_delimiter_policy(opts, bufnr)
-  local delim = config.resolve_delimiter(opts, bufnr)
+  local delim = resolve_delimiter(opts, bufnr)
   local delim_len = #delim
   local delim_bytes = { string.byte(delim, 1, delim_len) }
   return { ---@type CsvView.Parser.DelimiterPolicy
