@@ -14,42 +14,69 @@ describe("parser", function()
     local delimiter = p._create_delimiter_policy(opts, 0)
 
     it("line without empty fields", function()
-      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc,de,f,g,h", delimiter, quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, "f" }, { 10, "g" }, { 12, "h" } },
+        p._parse_line("abc,de,f,g,h", delimiter, quote_char_byte)
+      )
     end)
 
     it("should works for line includes empty fields", function()
-      assert.are.same({ "abc", "de", "", "g", "h" }, p._parse_line("abc,de,,g,h", delimiter, quote_char_byte))
-      assert.are.same({ "abc", "de", "f", "g", "" }, p._parse_line("abc,de,f,g,", delimiter, quote_char_byte))
-      assert.are.same({ "", "abc", "de", "f", "g" }, p._parse_line(",abc,de,f,g", delimiter, quote_char_byte))
-      assert.are.same({ "abc", "f", "g", "", "" }, p._parse_line("abc,f,g,,", delimiter, quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, "" }, { 9, "g" }, { 11, "h" } },
+        p._parse_line("abc,de,,g,h", delimiter, quote_char_byte)
+      )
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, "f" }, { 10, "g" }, { 12, "" } },
+        p._parse_line("abc,de,f,g,", delimiter, quote_char_byte)
+      )
+      assert.are.same(
+        { { 1, "" }, { 2, "abc" }, { 6, "de" }, { 9, "f" }, { 11, "g" } },
+        p._parse_line(",abc,de,f,g", delimiter, quote_char_byte)
+      )
+      assert.are.same(
+        { { 1, "abc" }, { 5, "f" }, { 7, "g" }, { 9, "" }, { 10, "" } },
+        p._parse_line("abc,f,g,,", delimiter, quote_char_byte)
+      )
     end)
 
     it("empty line", function()
       assert.are.same({}, p._parse_line("", delimiter, quote_char_byte))
     end)
     it("should works for line includes quoted comma.", function()
-      assert.are.same({ "abc", "de", '"f,g"', "h" }, p._parse_line('abc,de,"f,g",h', delimiter, quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, '"f,g"' }, { 14, "h" } },
+        p._parse_line('abc,de,"f,g",h', delimiter, quote_char_byte)
+      )
     end)
     it("handles fields with missing closing quotes", function()
-      assert.are.same({ "abc", "de", '"f,g,h' }, p._parse_line('abc,de,"f,g,h', delimiter, quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, '"f,g,h' } },
+        p._parse_line('abc,de,"f,g,h', delimiter, quote_char_byte)
+      )
     end)
     it("should work for line including single quoted comma.", function()
       local single_quote_char = "'"
       local single_quote_char_byte = string.byte(single_quote_char)
-      assert.are.same({ "abc", "de", "'f,g'", "h" }, p._parse_line("abc,de,'f,g',h", delimiter, single_quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, "'f,g'" }, { 14, "h" } },
+        p._parse_line("abc,de,'f,g',h", delimiter, single_quote_char_byte)
+      )
     end)
 
     it("parses tab-delimited lines correctly", function()
       local _opts = config.get({ parser = { delimiter = "\t" } })
       local _delimiter = p._create_delimiter_policy(_opts, 0)
-      assert.are.same({ "abc", "de", "f", "g", "h" }, p._parse_line("abc\tde\tf\tg\th", _delimiter, quote_char_byte))
+      assert.are.same(
+        { { 1, "abc" }, { 5, "de" }, { 8, "f" }, { 10, "g" }, { 12, "h" } },
+        p._parse_line("abc\tde\tf\tg\th", _delimiter, quote_char_byte)
+      )
     end)
 
     it("parses multi-character delimiter correctly", function()
       local _opts = config.get({ parser = { delimiter = "|!|!|" } })
       local _delimiter = p._create_delimiter_policy(_opts, 0)
       assert.are.same(
-        { "abc", "de", "f", "g", "h" },
+        { { 1, "abc" }, { 9, "de" }, { 16, "f" }, { 22, "g" }, { 28, "h" } },
         p._parse_line("abc|!|!|de|!|!|f|!|!|g|!|!|h", _delimiter, quote_char_byte)
       )
     end)
@@ -64,9 +91,9 @@ describe("parser", function()
         "m,n",
       }
       local expected = {
-        { "a", "b", "c", "d", "e", "", "" },
+        { { 1, "a" }, { 3, "b" }, { 5, "c" }, { 7, "d" }, { 9, "e" }, { 11, "" }, { 12, "" } },
         {},
-        { "m", "n" },
+        { { 1, "m" }, { 3, "n" } },
       }
       local buf = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -96,7 +123,7 @@ describe("parser", function()
       local startlnum = 2
       local endlnum = 3
       local expected = {
-        { "f", "g", "h", "i", "j", "k", "l" },
+        { { 1, "f" }, { 3, "g" }, { 5, "h" }, { 7, "i" }, { 9, "j" }, { 11, "k" }, { 13, "l" } },
         {},
       }
       local buf = vim.api.nvim_create_buf(false, true)
@@ -126,11 +153,17 @@ describe("parser", function()
         "m,n",
       }
       local expected = {
-        { is_comment = false, fields = { "a", "b", "c", "d", "e", "", "" } },
+        {
+          is_comment = false,
+          fields = { { 1, "a" }, { 3, "b" }, { 5, "c" }, { 7, "d" }, { 9, "e" }, { 11, "" }, { 12, "" } },
+        },
         { is_comment = true, fields = {} },
-        { is_comment = false, fields = { "f", "g", "h", "i", "j", "k", "l" } },
+        {
+          is_comment = false,
+          fields = { { 1, "f" }, { 3, "g" }, { 5, "h" }, { 7, "i" }, { 9, "j" }, { 11, "k" }, { 13, "l" } },
+        },
         { is_comment = false, fields = {} },
-        { is_comment = false, fields = { "m", "n" } },
+        { is_comment = false, fields = { { 1, "m" }, { 3, "n" } } },
       }
       local buf = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)

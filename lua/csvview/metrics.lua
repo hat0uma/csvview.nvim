@@ -20,6 +20,7 @@ local CsvViewMetrics = {}
 --- @field max_row integer
 
 --- @class CsvView.Metrics.Field
+--- @field offset integer
 --- @field len integer
 --- @field display_width integer
 --- @field is_number boolean
@@ -133,11 +134,8 @@ function CsvViewMetrics:col_idx_to_byte(row_idx, col_idx)
     error(string.format("Column out of bounds row_idx=%d col_idx=%d", row_idx, col_idx))
   end
 
-  local offset = 0
-  for i = 1, col_idx - 1 do
-    offset = offset + row.fields[i].len + self._delimiter_len
-  end
-  return offset, row.fields[col_idx] and row.fields[col_idx].len or 0
+  local field = row.fields[col_idx]
+  return field.offset, field.len
 end
 
 --- Get column index from byte position
@@ -158,15 +156,13 @@ function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
     error("Row has no fields row_idx=" .. row_idx)
   end
 
-  local offset = 0
   for i, field in ipairs(row.fields) do
-    if byte < (offset + field.len + self._delimiter_len) then
-      return i, offset
+    if byte < (field.offset + field.len + self._delimiter_len) then
+      return i, field.offset
     end
-    offset = offset + field.len + self._delimiter_len
   end
 
-  return #row.fields, offset
+  return #row.fields, row.fields[#row.fields].offset
 end
 
 --- Compute metrics
@@ -201,7 +197,7 @@ end
 
 --- Compute row metrics
 ---@param is_comment boolean
----@param fields string[]
+---@param fields CsvView.Parser.FieldInfo[]
 ---@return CsvView.Metrics.Row
 function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   if is_comment then
@@ -211,11 +207,12 @@ function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   -- Compute field metrics
   local row = { fields = {} } ---@type CsvView.Metrics.Row
   for _, field in ipairs(fields) do
-    local width = vim.fn.strdisplaywidth(field)
+    local width = vim.fn.strdisplaywidth(field.text)
     table.insert(row.fields, {
-      len = #field,
+      offset = field.start_pos - 1,
+      len = #field.text,
       display_width = width,
-      is_number = tonumber(field) ~= nil,
+      is_number = tonumber(field.text) ~= nil,
     })
   end
   return row

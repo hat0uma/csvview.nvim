@@ -2,8 +2,12 @@ local M = {}
 local config = require("csvview.config")
 local errors = require("csvview.errors")
 
+---@class CsvView.Parser.FieldInfo
+---@field start_pos integer 1-based start position of the fields
+---@field text string the text of the field
+
 ---@class Csvview.Parser.Callbacks
----@field on_line fun(lnum:integer,is_comment:boolean,fields:string[]) the callback to be called for each line
+---@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[]) the callback to be called for each line.
 ---@field on_end fun() the callback to be called when parsing is done
 
 ---@enum ParseState
@@ -72,9 +76,9 @@ end
 ---@param line string
 ---@param delimiter CsvView.Parser.DelimiterPolicy delimiter policy.
 ---@param quote_char integer byte code of the quote character.
----@return string[]
+---@return CsvView.Parser.FieldInfo[] fields
 function M._parse_line(line, delimiter, quote_char)
-  local fields = {} ---@type string[]
+  local fields = {} ---@type CsvView.Parser.FieldInfo[]
 
   local len = #line
   local state = PARSE_STATES.IN_FIELD
@@ -123,7 +127,8 @@ function M._parse_line(line, delimiter, quote_char)
       state == PARSE_STATES.MATCHING_DELIMITER
       and delimiter.check_match_complete(line, pos, char, delimiter_match_count)
     then
-      fields[#fields + 1] = line:sub(field_start_pos, pos - delimiter_match_count)
+      local text = line:sub(field_start_pos, pos - delimiter_match_count)
+      fields[#fields + 1] = { start_pos = field_start_pos, text = text }
       field_start_pos = pos + 1
       delimiter_match_count = 0
       state = PARSE_STATES.IN_FIELD
@@ -132,8 +137,9 @@ function M._parse_line(line, delimiter, quote_char)
     pos = pos + 1
   end
 
-  -- -- Add the last field to the list.
-  fields[#fields + 1] = line:sub(field_start_pos, pos - 1)
+  -- Add the last field to the list.
+  local text = line:sub(field_start_pos, pos - 1)
+  fields[#fields + 1] = { start_pos = field_start_pos, text = text }
   return fields
 end
 
