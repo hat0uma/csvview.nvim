@@ -1,4 +1,3 @@
-local config = require("csvview.config")
 local parser = require("csvview.parser")
 
 local nop = function() end
