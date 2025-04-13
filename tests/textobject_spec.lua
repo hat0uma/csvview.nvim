@@ -18,6 +18,7 @@ local function create_test(delimiter)
     table.concat({ "1", "XUMMW7737A", "Jane Davis", "jane.williams@example.org", "1964-03-22" }, delimiter),
     table.concat({ "# this is a comment" }, delimiter),
     table.concat({ "" }, delimiter),
+    table.concat({ "abc" }, delimiter),
   }
 
   ---@class CsvView.TextObjectCase
@@ -57,6 +58,12 @@ local function create_test(delimiter)
       cursor = { row = 4, col = 0 },
       opts = { include_delimiter = false },
       expected = "",
+    },
+    {
+      name = "select the current field with delimiter. The cursor is first and last column",
+      cursor = { row = 5, col = 0 },
+      opts = { include_delimiter = true },
+      expected = "abc",
     },
   }
   return opts, lines, cases
