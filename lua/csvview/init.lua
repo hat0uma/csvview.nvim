@@ -6,6 +6,7 @@ local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
 local CsvViewMetrics = require("csvview.metrics")
+local CsvViewParser = require("csvview.parser")
 local buf = require("csvview.buf")
 local config = require("csvview.config")
 local keymap = require("csvview.keymap")
@@ -32,7 +33,8 @@ function M.enable(bufnr, opts)
 
   -- Create a new CsvView instance
   local on_detach --- @type fun()
-  local metrics = CsvViewMetrics:new(bufnr, opts)
+  local parser = CsvViewParser:new(bufnr, opts)
+  local metrics = CsvViewMetrics:new(bufnr, opts, parser)
   local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
     on_detach()
   end)

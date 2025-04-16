@@ -1,5 +1,3 @@
-local parser = require("csvview.parser")
-
 local nop = function() end
 
 --- @class CsvView.Metrics
@@ -7,6 +5,7 @@ local nop = function() end
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
 --- @field private _opts CsvView.InternalOptions
+--- @field private _parser CsvView.Parser
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -26,13 +25,15 @@ local CsvViewMetrics = {}
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
+---@param parser CsvView.Parser
 ---@return CsvView.Metrics
-function CsvViewMetrics:new(bufnr, opts)
+function CsvViewMetrics:new(bufnr, opts, parser)
   self.__index = self
 
   local obj = {}
   obj._bufnr = bufnr
   obj._opts = opts
+  obj._parser = parser
   obj.rows = {}
   obj.columns = {}
 
@@ -169,7 +170,7 @@ end
 ---@param on_end fun() callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
-  parser.iter_lines_async(self._bufnr, startlnum, endlnum, {
+  self._parser:parse_lines({
     on_line = function(lnum, is_comment, fields)
       local prev_row = self.rows[lnum]
 
@@ -188,7 +189,7 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       -- notify the end of the update
       on_end()
     end,
-  }, self._opts)
+  }, startlnum, endlnum)
 end
 
 --- Compute row metrics
