@@ -9,8 +9,14 @@ local errors = require("csvview.errors")
 ---@field on_end fun(err?:string) the callback to be called when parsing is done
 
 ---@class CsvView.Parser.DelimiterPolicy
----@field match fun(s:string, pos:integer, char:integer, match_count:integer): boolean
----@field check_match_complete fun(s:string, pos:integer, char:integer, match_count:integer): boolean
+---@field match fun(s:string, pos:integer, char:integer, match_count:integer): CsvView.Parser.DelimiterPolicy.MatchState
+
+---@enum CsvView.Parser.DelimiterPolicy.MatchState
+local MatchState = {
+  NO_MATCH = 0,
+  MATCHING = 1,
+  MATCH_COMPLETE = 2,
+}
 
 --- Resolve delimiter character
 ---@param opts CsvView.InternalOptions
@@ -36,24 +42,6 @@ local function resolve_delimiter(opts, bufnr)
   return char
 end
 
---- Create a delimiter policy.
----@param opts CsvView.InternalOptions
----@param bufnr integer
----@return CsvView.Parser.DelimiterPolicy
-local function create_delimiter_policy(opts, bufnr)
-  local delim = resolve_delimiter(opts, bufnr)
-  local delim_len = #delim
-  local delim_bytes = { string.byte(delim, 1, delim_len) }
-  return { ---@type CsvView.Parser.DelimiterPolicy
-    match = function(s, pos, char, match_count)
-      return char == delim_bytes[match_count + 1]
-    end,
-    check_match_complete = function(s, pos, char, match_count)
-      return match_count == delim_len
-    end,
-  }
-end
-
 --- Get quote char character
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
@@ -69,6 +57,25 @@ local function quote_char_byte(bufnr, opts)
   assert(type(char) == "string", string.format("quote char must be a string, got %s", type(char)))
   assert(#char == 1, string.format("quote char must be a single character, got %s", char))
   return char:byte()
+end
+
+--- Plain text delimiter
+---@param opts CsvView.InternalOptions
+---@param bufnr integer
+---@return CsvView.Parser.DelimiterPolicy
+local function plain_text_delimiter(opts, bufnr)
+  local delim = resolve_delimiter(opts, bufnr)
+  local delim_len = #delim
+  local delim_bytes = { string.byte(delim, 1, delim_len) }
+  return { ---@type CsvView.Parser.DelimiterPolicy
+    match = function(_, _, char, match_count)
+      if char == delim_bytes[match_count + 1] then
+        return match_count + 1 == delim_len and MatchState.MATCH_COMPLETE or MatchState.MATCHING
+      else
+        return MatchState.NO_MATCH
+      end
+    end,
+  }
 end
 
 ---@class CsvView.Parser
@@ -88,7 +95,10 @@ function CsvViewParser:new(bufnr, opts)
   obj._bufnr = bufnr
   obj._opts = opts
   obj._quote_char = quote_char_byte(bufnr, opts)
-  obj._delimiter = create_delimiter_policy(opts, bufnr)
+  obj._delimiter = plain_text_delimiter(opts, bufnr)
+
+  -- NOTE: If this is set to 1 or more, multi-line fields will be parsed.
+  -- However, since other modules do not expect multi-line fields, we will set this to 0 for now.
   obj._max_lookahead = 0
 
   setmetatable(obj, self)
@@ -115,7 +125,7 @@ function CsvViewParser:_is_comment_line(line)
   return false
 end
 
---- Parse CSV lines.
+--- Parse CSV logical line.
 ---@param lnum integer 1-indexed line number.
 ---@return boolean is_comment_line Whether the line is a comment line.
 ---@return CsvView.Parser.FieldInfo[] fields An array of field information.
@@ -131,7 +141,6 @@ function CsvViewParser:_parse_line(lnum)
   -- - Limit the search for closing quotes to a specified number of lines.
   --   (Parsing is triggered by user edits, so without this limit, adding a quote would re-parse all lines.)
   local fields = {} ---@type CsvView.Parser.FieldInfo[]
-  local start_lnum = lnum
   local current_lnum = lnum
 
   -- Get initial line
@@ -154,48 +163,29 @@ function CsvViewParser:_parse_line(lnum)
   ---@return boolean closed
   local function skip_until_closing_quote()
     while true do
-      local char = line:byte(pos)
-      if not char then
-        -- We're in a quoted field that spans multiple lines
-        if current_lnum >= (start_lnum + self._max_lookahead) then
-          -- We've reached the maximum lookahead, treat this as the end of the field
-          break
-        end
-
-        -- Add the current line to the field text and continue to the next line
-        if field_start.lnum == current_lnum then
-          -- If we're still on the same line, just append the text
-          table.insert(multiline_field_parts, line:sub(field_start.pos))
-        else
-          table.insert(multiline_field_parts, line)
-        end
-
-        current_lnum = current_lnum + 1
-        line = self:_get_line(current_lnum)
-        if not line then
-          -- End of buffer reached while in a quoted field
-          break
-        end
-
-        pos = 1
-        char = line:byte(pos)
+      local found
+      found, pos = self:_find_closing_quote_within_line(line, pos)
+      if found then
+        return true
       end
 
-      if char == self._quote_char then
-        local next_char = line:byte(pos + 1)
-        if next_char == self._quote_char then
-          -- This is an escaped quote, skip the next character
-          pos = pos + 1
-        else
-          -- This is the end of the quoted field
-          return true
-        end
+      if current_lnum >= (field_start.lnum + self._max_lookahead) then
+        return false
       end
 
-      pos = pos + 1
+      -- Add the current line to the field text and continue to the next line
+      local part = current_lnum == field_start.lnum and line:sub(field_start.pos) or line
+      table.insert(multiline_field_parts, part)
+
+      -- Look for the next line
+      current_lnum = current_lnum + 1
+      pos = 1
+      line = self:_get_line(current_lnum)
+      if not line then
+        -- If we reach the end of the buffer, we stop looking for the closing quote
+        return false
+      end
     end
-
-    return false
   end
 
   --- Add a field to the list of fields.
@@ -224,17 +214,21 @@ function CsvViewParser:_parse_line(lnum)
         -- We break out of the loop and treat this as the end of the field
         break
       end
-    elseif self._delimiter.match(line, pos, char, delimiter_match_count) then
-      delimiter_match_count = delimiter_match_count + 1
-      if self._delimiter.check_match_complete(line, pos, char, delimiter_match_count) then
-        -- If the delimiter is fully matched, add the field to the list and reset the state
-        add_field(pos - delimiter_match_count)
+    else
+      local delimiter_match_state = self._delimiter.match(line, pos, char, delimiter_match_count)
+      if delimiter_match_state == MatchState.MATCHING then
+        -- If we are in a matching state, we continue to match the delimiter
+        delimiter_match_count = delimiter_match_count + 1
+      elseif delimiter_match_state == MatchState.MATCH_COMPLETE then
+        -- If we have a complete match, we add the field to the list
+        add_field(pos - (delimiter_match_count + 1))
         field_start.lnum = current_lnum
         field_start.pos = pos + 1
         delimiter_match_count = 0
+      else
+        -- If we are not matching, we reset the delimiter match count
+        delimiter_match_count = 0
       end
-    else
-      delimiter_match_count = 0
     end
 
     pos = pos + 1
@@ -281,7 +275,7 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
       current_lnum = current_lnum + 1
     end
 
-    if current_lnum < endlnum then
+    if current_lnum <= endlnum then
       vim.schedule(do_step)
     else
       cb.on_end()
@@ -294,6 +288,30 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
 
   -- start parsing
   do_step()
+end
+
+--- Find the closing quote for a quoted field.
+---@param line string The line to search in. mutate
+---@param pos integer The starting position to search from.
+---@return boolean found Whether the closing quote was found.
+---@return integer pos The position of the closing quote.
+function CsvViewParser:_find_closing_quote_within_line(line, pos)
+  local len = #line
+  while pos <= len do
+    if line:byte(pos) == self._quote_char then
+      if line:byte(pos + 1) == self._quote_char then
+        -- This is an escaped quote, skip the next character
+        pos = pos + 1
+      else
+        -- This is the end of the quoted field
+        return true, pos
+      end
+    end
+
+    pos = pos + 1
+  end
+
+  return false, pos
 end
 
 return CsvViewParser

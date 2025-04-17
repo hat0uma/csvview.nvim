@@ -1,6 +1,5 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 local buf = require("csvview.buf")
-local config = require("csvview.config")
 local errors = require("csvview.errors")
 
 --- Set local option for window
