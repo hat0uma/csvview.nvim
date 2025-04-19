@@ -52,7 +52,7 @@ function CsvViewMetrics:clear()
 end
 
 --- Compute metrics for the entire buffer
----@param on_end fun()? callback for when the update is complete
+---@param on_end fun(err:string|nil)? callback for when the update is complete
 function CsvViewMetrics:compute_buffer(on_end)
   on_end = on_end or nop
   self:_compute_metrics(nil, nil, {}, on_end)
@@ -72,7 +72,7 @@ end
 ---@param first integer first line number
 ---@param prev_last integer previous last line
 ---@param last integer current last line
----@param on_end fun()? callback for when the update is complete
+---@param on_end fun(err:string|nil)? callback for when the update is complete
 function CsvViewMetrics:update(first, prev_last, last, on_end)
   on_end = on_end or nop
 
@@ -167,7 +167,7 @@ end
 ---@param startlnum integer? if present, compute only specified range
 ---@param endlnum integer? if present, compute only specified range
 ---@param recalculate_columns table<integer,boolean> recalculate specified columns
----@param on_end fun() callback for when the update is complete
+---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
   self._parser:parse_lines({
@@ -179,7 +179,12 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       self:_mark_recalculation_on_decrease_fields(lnum, prev_row, recalculate_columns)
       self:_adjust_column_metrics_for_row(lnum, recalculate_columns)
     end,
-    on_end = function()
+    on_end = function(err)
+      if err then
+        on_end(err)
+        return
+      end
+
       -- Recalculate column metrics if necessary
       -- vim.print("recalculate_columns", recalculate_columns)
       for col_idx, _ in pairs(recalculate_columns) do

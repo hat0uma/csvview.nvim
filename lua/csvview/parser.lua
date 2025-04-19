@@ -18,10 +18,27 @@ local MatchState = {
   MATCH_COMPLETE = 2,
 }
 
+--- Plain text delimiter
+---@param delim string
+---@return CsvView.Parser.DelimiterPolicy
+local function plain_text_delimiter(delim)
+  local delim_len = #delim
+  local delim_bytes = { string.byte(delim, 1, delim_len) }
+  return { ---@type CsvView.Parser.DelimiterPolicy
+    match = function(_, _, char, match_count)
+      if char == delim_bytes[match_count + 1] then
+        return match_count + 1 == delim_len and MatchState.MATCH_COMPLETE or MatchState.MATCHING
+      else
+        return MatchState.NO_MATCH
+      end
+    end,
+  }
+end
+
 --- Resolve delimiter character
 ---@param opts CsvView.InternalOptions
 ---@param bufnr integer
----@return string
+---@return CsvView.Parser.DelimiterPolicy
 local function resolve_delimiter(opts, bufnr)
   local delim = opts.parser.delimiter
   ---@diagnostic disable-next-line: no-unknown
@@ -39,7 +56,7 @@ local function resolve_delimiter(opts, bufnr)
   end
 
   assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))
-  return char
+  return plain_text_delimiter(char)
 end
 
 --- Get quote char character
@@ -59,25 +76,6 @@ local function quote_char_byte(bufnr, opts)
   return char:byte()
 end
 
---- Plain text delimiter
----@param opts CsvView.InternalOptions
----@param bufnr integer
----@return CsvView.Parser.DelimiterPolicy
-local function plain_text_delimiter(opts, bufnr)
-  local delim = resolve_delimiter(opts, bufnr)
-  local delim_len = #delim
-  local delim_bytes = { string.byte(delim, 1, delim_len) }
-  return { ---@type CsvView.Parser.DelimiterPolicy
-    match = function(_, _, char, match_count)
-      if char == delim_bytes[match_count + 1] then
-        return match_count + 1 == delim_len and MatchState.MATCH_COMPLETE or MatchState.MATCHING
-      else
-        return MatchState.NO_MATCH
-      end
-    end,
-  }
-end
-
 ---@class CsvView.Parser
 ---@field private _bufnr integer Buffer number.
 ---@field private _opts CsvView.InternalOptions Options for parsing.
@@ -95,10 +93,10 @@ function CsvViewParser:new(bufnr, opts)
   obj._bufnr = bufnr
   obj._opts = opts
   obj._quote_char = quote_char_byte(bufnr, opts)
-  obj._delimiter = plain_text_delimiter(opts, bufnr)
+  obj._delimiter = resolve_delimiter(opts, bufnr)
 
   -- NOTE: If this is set to 1 or more, multi-line fields will be parsed.
-  -- However, since other modules do not expect multi-line fields, we will set this to 0 for now.
+  -- However, since other modules do not expect multi-line fields, set it to 0 for now.
   obj._max_lookahead = 0
 
   setmetatable(obj, self)
@@ -160,6 +158,8 @@ function CsvViewParser:_parse_line(lnum)
   local multiline_field_parts = {} ---@type string[]
 
   --- Skip until the closing quote is found.
+  --- This function advances `pos` until the closing quote is found.
+  --- If the closing quote is not found within the lookahead limit, it returns false.
   ---@return boolean closed
   local function skip_until_closing_quote()
     while true do
@@ -182,7 +182,7 @@ function CsvViewParser:_parse_line(lnum)
       pos = 1
       line = self:_get_line(current_lnum)
       if not line then
-        -- If we reach the end of the buffer, we stop looking for the closing quote
+        -- Reached the end of the buffer
         return false
       end
     end
@@ -210,23 +210,23 @@ function CsvViewParser:_parse_line(lnum)
       pos = pos + 1
       local closed = skip_until_closing_quote()
       if not closed then
-        -- If we reach here, it means we didn't find a closing quote
-        -- We break out of the loop and treat this as the end of the field
+        -- Could not find the closing quote within the lookahead limit
+        -- Treat the rest of the line as a single field
         break
       end
     else
       local delimiter_match_state = self._delimiter.match(line, pos, char, delimiter_match_count)
       if delimiter_match_state == MatchState.MATCHING then
-        -- If we are in a matching state, we continue to match the delimiter
+        -- A delimiter match is in progress
         delimiter_match_count = delimiter_match_count + 1
       elseif delimiter_match_state == MatchState.MATCH_COMPLETE then
-        -- If we have a complete match, we add the field to the list
+        -- A complete delimiter match is found
         add_field(pos - (delimiter_match_count + 1))
         field_start.lnum = current_lnum
         field_start.pos = pos + 1
         delimiter_match_count = 0
       else
-        -- If we are not matching, we reset the delimiter match count
+        -- No match, reset the delimiter match count
         delimiter_match_count = 0
       end
     end
@@ -251,10 +251,16 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
   endlnum = endlnum or vim.api.nvim_buf_line_count(self._bufnr)
 
   local iter_num = (endlnum - startlnum) / self._opts.parser.async_chunksize
+  local on_success = cb.on_end
   local should_notify = iter_num > 1000
-  local start_time = vim.uv.now()
   if should_notify then
+    local start_time = vim.uv.now()
     vim.notify("csvview: parsing buffer, please wait...")
+    on_success = function()
+      cb.on_end()
+      local elapsed = vim.loop.now() - start_time
+      vim.notify(string.format("csvview: parsing buffer done in %d[ms]", elapsed))
+    end
   end
 
   local iter --- @type fun():nil
@@ -278,11 +284,7 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
     if current_lnum <= endlnum then
       vim.schedule(do_step)
     else
-      cb.on_end()
-      if should_notify then
-        local elapsed = vim.loop.now() - start_time
-        vim.notify(string.format("csvview: parsing buffer done in %d[ms]", elapsed))
-      end
+      on_success()
     end
   end
 

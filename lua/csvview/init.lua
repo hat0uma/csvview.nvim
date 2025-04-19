@@ -62,7 +62,13 @@ function M.enable(bufnr, opts)
         -- Handle normal buffer update events
         -- TODO: Process the case where the next update comes before the current update is completed
         view:lock()
-        metrics:update(first, last, last_updated, function()
+        metrics:update(first, last, last_updated, function(err)
+          if err then
+            vim.notify("csvview: failed to update metrics: " .. err, vim.log.levels.ERROR)
+            M.disable(bufnr)
+            return
+          end
+
           view:unlock()
           view:clear()
         end)
@@ -73,7 +79,13 @@ function M.enable(bufnr, opts)
       view:clear()
       metrics:clear()
       view:lock()
-      metrics:compute_buffer(function()
+      metrics:compute_buffer(function(err)
+        if err then
+          vim.notify("csvview: failed to compute metrics: " .. err, vim.log.levels.ERROR)
+          M.disable(bufnr)
+          return
+        end
+
         view:unlock()
       end)
     end,
@@ -92,7 +104,12 @@ function M.enable(bufnr, opts)
   end
 
   -- Calculate metrics and attach view.
-  metrics:compute_buffer(function()
+  metrics:compute_buffer(function(err)
+    if err then
+      vim.notify("csvview: failed to compute metrics: " .. err, vim.log.levels.ERROR)
+      return
+    end
+
     -- disable builtin syntax highlighting.
     -- NOTE: This is necessary to prevent syntax highlighting from interfering with the custom highlighting of the view.
     vim.bo[bufnr].syntax = ""
