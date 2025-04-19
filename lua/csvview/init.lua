@@ -6,6 +6,7 @@ local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
 local CsvViewMetrics = require("csvview.metrics")
+local CsvViewParser = require("csvview.parser")
 local buf = require("csvview.buf")
 local config = require("csvview.config")
 local keymap = require("csvview.keymap")
@@ -32,7 +33,8 @@ function M.enable(bufnr, opts)
 
   -- Create a new CsvView instance
   local on_detach --- @type fun()
-  local metrics = CsvViewMetrics:new(bufnr, opts)
+  local parser = CsvViewParser:new(bufnr, opts)
+  local metrics = CsvViewMetrics:new(bufnr, opts, parser)
   local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
     on_detach()
   end)
@@ -60,7 +62,13 @@ function M.enable(bufnr, opts)
         -- Handle normal buffer update events
         -- TODO: Process the case where the next update comes before the current update is completed
         view:lock()
-        metrics:update(first, last, last_updated, function()
+        metrics:update(first, last, last_updated, function(err)
+          if err then
+            vim.notify("csvview: failed to update metrics: " .. err, vim.log.levels.ERROR)
+            M.disable(bufnr)
+            return
+          end
+
           view:unlock()
           view:clear()
         end)
@@ -71,7 +79,13 @@ function M.enable(bufnr, opts)
       view:clear()
       metrics:clear()
       view:lock()
-      metrics:compute_buffer(function()
+      metrics:compute_buffer(function(err)
+        if err then
+          vim.notify("csvview: failed to compute metrics: " .. err, vim.log.levels.ERROR)
+          M.disable(bufnr)
+          return
+        end
+
         view:unlock()
       end)
     end,
@@ -90,7 +104,12 @@ function M.enable(bufnr, opts)
   end
 
   -- Calculate metrics and attach view.
-  metrics:compute_buffer(function()
+  metrics:compute_buffer(function(err)
+    if err then
+      vim.notify("csvview: failed to compute metrics: " .. err, vim.log.levels.ERROR)
+      return
+    end
+
     -- disable builtin syntax highlighting.
     -- NOTE: This is necessary to prevent syntax highlighting from interfering with the custom highlighting of the view.
     vim.bo[bufnr].syntax = ""

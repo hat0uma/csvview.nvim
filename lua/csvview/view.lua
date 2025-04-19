@@ -1,6 +1,5 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 local buf = require("csvview.buf")
-local config = require("csvview.config")
 local errors = require("csvview.errors")
 
 --- Set local option for window
@@ -21,7 +20,6 @@ end
 --- @field private _extmarks table<integer,integer[]> 1-based line -> extmark ids
 --- @field private _on_dispose function? called when view is disposed
 --- @field private _locked boolean
---- @field private _delimiter string
 local View = {}
 
 --- create new view
@@ -40,7 +38,6 @@ function View:new(bufnr, metrics, opts, on_dispose)
   obj._extmarks = {}
   obj._on_dispose = on_dispose
   obj._locked = false
-  obj._delimiter = config.resolve_delimiter(opts, bufnr)
   return setmetatable(obj, self)
 end
 
@@ -125,10 +122,9 @@ end
 
 --- Align field to the left
 ---@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
 ---@param padding integer
 ---@param field CsvView.Metrics.Field
-function View:_align_field(lnum, offset, padding, field)
+function View:_align_field(lnum, padding, field)
   if padding <= 0 then
     return
   end
@@ -136,14 +132,14 @@ function View:_align_field(lnum, offset, padding, field)
   local pad = { { string.rep(" ", padding) } }
   if field.is_number then
     -- align right
-    self:_add_extmark(lnum, offset, {
+    self:_add_extmark(lnum, field.offset, {
       virt_text = pad,
       virt_text_pos = "inline",
       right_gravity = false,
     })
   else
     -- align left
-    self:_add_extmark(lnum, offset + field.len, {
+    self:_add_extmark(lnum, field.offset + field.len, {
       virt_text = pad,
       virt_text_pos = "inline",
       right_gravity = true,
@@ -153,9 +149,11 @@ end
 
 --- Render delimiter char
 ---@param lnum integer 1-indexed lnum
----@param offset integer 0-indexed byte offset
-function View:_render_delimiter(lnum, offset)
-  local end_col = offset + #self._delimiter
+---@param field CsvView.Metrics.Field
+---@param next_field CsvView.Metrics.Field
+function View:_render_delimiter(lnum, field, next_field)
+  local offset = field.offset + field.len
+  local end_col = next_field.offset
   if self.opts.view.display_mode == "border" then
     self:_add_extmark(lnum, offset, {
       hl_group = "CsvViewDelimiter",
@@ -179,13 +177,12 @@ end
 --- highlight field
 ---@param lnum integer 1-indexed lnum
 ---@param column_index integer 1-indexed column index
----@param offset integer 0-indexed byte offset
 ---@param field CsvView.Metrics.Field
-function View:_highlight_field(lnum, column_index, offset, field)
+function View:_highlight_field(lnum, column_index, field)
   -- highlight field
-  self:_add_extmark(lnum, offset, {
+  self:_add_extmark(lnum, field.offset, {
     hl_group = "CsvViewCol" .. (column_index - 1) % 9,
-    end_col = offset + field.len,
+    end_col = field.offset + field.len,
   })
 end
 
@@ -193,22 +190,21 @@ end
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
 ---@param field CsvView.Metrics.Field
----@param offset integer 0-indexed byte offset
-function View:_render_field(lnum, column_index, field, offset)
+function View:_render_field(lnum, column_index, field)
   if not self.metrics.columns[column_index] then
     -- not computed yet.
     return
   end
 
   -- if column is last, do not render delimiter
-  local should_render_delimiter = column_index < #self.metrics.rows[lnum].fields
   local colwidth = math.max(self.metrics.columns[column_index].max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
 
-  self:_highlight_field(lnum, column_index, offset, field)
-  self:_align_field(lnum, offset, padding, field)
-  if should_render_delimiter then
-    self:_render_delimiter(lnum, offset + field.len)
+  self:_highlight_field(lnum, column_index, field)
+  self:_align_field(lnum, padding, field)
+  local next_field = self.metrics.rows[lnum].fields[column_index + 1]
+  if next_field then
+    self:_render_delimiter(lnum, field, next_field)
   end
 end
 
@@ -243,13 +239,11 @@ function View:_render_line(lnum)
   end
 
   -- render fields
-  local offset = 0
   for column_index, field in ipairs(line.fields) do
-    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field, offset)
+    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })
     end
-    offset = offset + field.len + #self._delimiter
   end
 end
 

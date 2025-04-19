@@ -1,6 +1,3 @@
-local config = require("csvview.config")
-local parser = require("csvview.parser")
-
 local nop = function() end
 
 --- @class CsvView.Metrics
@@ -8,7 +5,7 @@ local nop = function() end
 --- @field public columns CsvView.Metrics.Column[]
 --- @field private _bufnr integer
 --- @field private _opts CsvView.InternalOptions
---- @field private _delimiter_len integer
+--- @field private _parser CsvView.Parser
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Row
@@ -20,6 +17,7 @@ local CsvViewMetrics = {}
 --- @field max_row integer
 
 --- @class CsvView.Metrics.Field
+--- @field offset integer
 --- @field len integer
 --- @field display_width integer
 --- @field is_number boolean
@@ -27,16 +25,17 @@ local CsvViewMetrics = {}
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
+---@param parser CsvView.Parser
 ---@return CsvView.Metrics
-function CsvViewMetrics:new(bufnr, opts)
+function CsvViewMetrics:new(bufnr, opts, parser)
   self.__index = self
 
   local obj = {}
   obj._bufnr = bufnr
   obj._opts = opts
+  obj._parser = parser
   obj.rows = {}
   obj.columns = {}
-  obj._delimiter_len = #config.resolve_delimiter(opts, bufnr)
 
   return setmetatable(obj, self)
 end
@@ -53,7 +52,7 @@ function CsvViewMetrics:clear()
 end
 
 --- Compute metrics for the entire buffer
----@param on_end fun()? callback for when the update is complete
+---@param on_end fun(err:string|nil)? callback for when the update is complete
 function CsvViewMetrics:compute_buffer(on_end)
   on_end = on_end or nop
   self:_compute_metrics(nil, nil, {}, on_end)
@@ -73,7 +72,7 @@ end
 ---@param first integer first line number
 ---@param prev_last integer previous last line
 ---@param last integer current last line
----@param on_end fun()? callback for when the update is complete
+---@param on_end fun(err:string|nil)? callback for when the update is complete
 function CsvViewMetrics:update(first, prev_last, last, on_end)
   on_end = on_end or nop
 
@@ -133,18 +132,14 @@ function CsvViewMetrics:col_idx_to_byte(row_idx, col_idx)
     error(string.format("Column out of bounds row_idx=%d col_idx=%d", row_idx, col_idx))
   end
 
-  local offset = 0
-  for i = 1, col_idx - 1 do
-    offset = offset + row.fields[i].len + self._delimiter_len
-  end
-  return offset, row.fields[col_idx] and row.fields[col_idx].len or 0
+  local field = row.fields[col_idx]
+  return field.offset, field.len
 end
 
 --- Get column index from byte position
 ---@param row_idx integer row index(1-indexed)
 ---@param byte integer byte position in the row
 ---@return integer col_idx 1-indexed column index
----@return integer offset byte offset of the column
 function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
   local row = self.rows[row_idx]
   if not row then
@@ -158,15 +153,13 @@ function CsvViewMetrics:byte_to_col_idx(row_idx, byte)
     error("Row has no fields row_idx=" .. row_idx)
   end
 
-  local offset = 0
   for i, field in ipairs(row.fields) do
-    if byte < (offset + field.len + self._delimiter_len) then
-      return i, offset
+    if byte < field.offset then
+      return i - 1
     end
-    offset = offset + field.len + self._delimiter_len
   end
 
-  return #row.fields, offset
+  return #row.fields
 end
 
 --- Compute metrics
@@ -174,10 +167,10 @@ end
 ---@param startlnum integer? if present, compute only specified range
 ---@param endlnum integer? if present, compute only specified range
 ---@param recalculate_columns table<integer,boolean> recalculate specified columns
----@param on_end fun() callback for when the update is complete
+---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
-  parser.iter_lines_async(self._bufnr, startlnum, endlnum, {
+  self._parser:parse_lines({
     on_line = function(lnum, is_comment, fields)
       local prev_row = self.rows[lnum]
 
@@ -186,7 +179,12 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       self:_mark_recalculation_on_decrease_fields(lnum, prev_row, recalculate_columns)
       self:_adjust_column_metrics_for_row(lnum, recalculate_columns)
     end,
-    on_end = function()
+    on_end = function(err)
+      if err then
+        on_end(err)
+        return
+      end
+
       -- Recalculate column metrics if necessary
       -- vim.print("recalculate_columns", recalculate_columns)
       for col_idx, _ in pairs(recalculate_columns) do
@@ -196,12 +194,12 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       -- notify the end of the update
       on_end()
     end,
-  }, self._opts)
+  }, startlnum, endlnum)
 end
 
 --- Compute row metrics
 ---@param is_comment boolean
----@param fields string[]
+---@param fields CsvView.Parser.FieldInfo[]
 ---@return CsvView.Metrics.Row
 function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   if is_comment then
@@ -211,11 +209,12 @@ function CsvViewMetrics:_compute_metrics_for_row(is_comment, fields)
   -- Compute field metrics
   local row = { fields = {} } ---@type CsvView.Metrics.Row
   for _, field in ipairs(fields) do
-    local width = vim.fn.strdisplaywidth(field)
+    local width = vim.fn.strdisplaywidth(field.text)
     table.insert(row.fields, {
-      len = #field,
+      offset = field.start_pos - 1,
+      len = #field.text,
       display_width = width,
-      is_number = tonumber(field) ~= nil,
+      is_number = tonumber(field.text) ~= nil,
     })
   end
   return row
