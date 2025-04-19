@@ -204,7 +204,7 @@ local cases = {
   },
   {
     it = "should ignore comment lines",
-    opts = { parser = { comments = { "#" } } },
+    opts = { parser = { async_chunksize = 4, comments = { "#" } } },
     lines = {
       "a,b,c,d,e,,",
       "# this is a comment",
@@ -350,6 +350,7 @@ describe("CsvViewParser", function()
 
       coroutine.yield()
       vim.api.nvim_buf_delete(bufnr, { force = true })
+      assert.are.same(#case.expected, #results)
       for i = 1, #results do
         assert.are.same(case.expected[i].is_comment, results[i].is_comment)
         assert.are.same(case.expected[i].fields, results[i].fields)
