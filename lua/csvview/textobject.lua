@@ -30,7 +30,7 @@ function M.field(bufnr, opts)
   end
 
   -- Get the field range.
-  local row = view.metrics.rows[row_idx]
+  local row = view.metrics:row({ row_idx = row_idx })
   local field = row.fields[col_idx]
   local start_col = field.offset
   local end_col = field.offset + field.len - 1
@@ -38,7 +38,7 @@ function M.field(bufnr, opts)
   -- If `include_delimiter` is true, expand the range.
   -- NOTE: If the number of fields is 1, there is no delimiter. Ignore `include_delimiter`.
   if include_delimiter and #row.fields > 1 then
-    local is_last_col = col_idx == #view.metrics.rows[row_idx].fields
+    local is_last_col = col_idx == #row.fields
     if is_last_col then
       local prev_field = row.fields[col_idx - 1]
       start_col = prev_field.offset + prev_field.len -- include the before delimiter

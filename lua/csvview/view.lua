@@ -191,18 +191,19 @@ end
 ---@param column_index 1-indexed column index
 ---@param field CsvView.Metrics.Field
 function View:_render_field(lnum, column_index, field)
-  if not self.metrics.columns[column_index] then
+  local column = self.metrics:column(column_index)
+  if not column then
     -- not computed yet.
     return
   end
 
   -- if column is last, do not render delimiter
-  local colwidth = math.max(self.metrics.columns[column_index].max_width, self.opts.view.min_column_width)
+  local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
 
   self:_highlight_field(lnum, column_index, field)
   self:_align_field(lnum, padding, field)
-  local next_field = self.metrics.rows[lnum].fields[column_index + 1]
+  local next_field = self.metrics:row({ lnum = lnum }).fields[column_index + 1]
   if next_field then
     self:_render_delimiter(lnum, field, next_field)
   end
@@ -218,8 +219,8 @@ end
 --- Render line
 ---@param lnum integer 1-indexed lnum
 function View:_render_line(lnum)
-  local line = self.metrics.rows[lnum]
-  if not line then
+  local row = self.metrics:row({ lnum = lnum })
+  if not row then
     return
   end
 
@@ -228,7 +229,7 @@ function View:_render_line(lnum)
     return
   end
 
-  if line.is_comment then
+  if row.is_comment then
     self:_highlight_comment(lnum)
     return
   end
@@ -239,7 +240,7 @@ function View:_render_line(lnum)
   end
 
   -- render fields
-  for column_index, field in ipairs(line.fields) do
+  for column_index, field in ipairs(row.fields) do
     local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })
