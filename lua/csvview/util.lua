@@ -38,7 +38,7 @@ function M.get_cursor(bufnr)
 
   -- Get the (line, column) position of the cursor in the window
   local lnum, col_byte = unpack(vim.api.nvim_win_get_cursor(winid))
-  local row = view.metrics.rows[lnum]
+  local row = view.metrics:row({ lnum = lnum })
   if not row then
     error("Cursor is out of bounds.")
   end
@@ -54,9 +54,7 @@ function M.get_cursor(bufnr)
   end
 
   -- Convert the byte position to a column index
-  local col_idx = view.metrics:byte_to_col_idx(lnum, col_byte)
-
-  local field = row.fields[col_idx]
+  local col_idx, field = row:get_field_by_offset(col_byte)
   local offset_in_field = col_byte - field.offset
   local text = vim.api.nvim_buf_get_text(bufnr, lnum - 1, field.offset, lnum - 1, field.offset + field.len, {})[1]
 
