@@ -5,7 +5,7 @@ local errors = require("csvview.errors")
 ---@field text string|string[] the text of the field. if the field is a quoted field, it will be a string array.
 
 ---@class Csvview.Parser.Callbacks
----@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[]) the callback to be called for each line.
+---@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[], endlnum: integer) the callback to be called for each line.
 ---@field on_end fun(err?:string) the callback to be called when parsing is done
 
 ---@class CsvView.Parser.DelimiterPolicy
@@ -97,7 +97,7 @@ function CsvViewParser:new(bufnr, opts)
 
   -- NOTE: If this is set to 1 or more, multi-line fields will be parsed.
   -- However, since other modules do not expect multi-line fields, set it to 0 for now.
-  obj._max_lookahead = 0
+  obj._max_lookahead = 50
 
   setmetatable(obj, self)
   self.__index = self
@@ -152,6 +152,8 @@ function CsvViewParser:_parse_line(lnum)
     return true, fields, current_lnum
   end
 
+  local line_count = vim.api.nvim_buf_line_count(self._bufnr)
+
   local pos = 1
   local delimiter_match_count = 0
   local field_start = { lnum = lnum, pos = 1 }
@@ -169,7 +171,7 @@ function CsvViewParser:_parse_line(lnum)
         return true
       end
 
-      if current_lnum >= (field_start.lnum + self._max_lookahead) then
+      if current_lnum >= math.min(field_start.lnum + self._max_lookahead, line_count) then
         return false
       end
 
@@ -275,10 +277,9 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
   iter = function()
     local chunk_end = math.min(current_lnum + self._opts.parser.async_chunksize - 1, endlnum)
     while current_lnum <= chunk_end do
-      local is_comment, fields
-      is_comment, fields, current_lnum = self:_parse_line(current_lnum)
-      cb.on_line(current_lnum, is_comment, fields)
-      current_lnum = current_lnum + 1
+      local is_comment, fields, parse_endlnum = self:_parse_line(current_lnum)
+      cb.on_line(current_lnum, is_comment, fields, parse_endlnum)
+      current_lnum = parse_endlnum + 1
     end
 
     if current_lnum <= endlnum then

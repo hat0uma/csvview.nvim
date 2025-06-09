@@ -203,7 +203,7 @@ function View:_render_field(lnum, column_index, field)
 
   self:_highlight_field(lnum, column_index, field)
   self:_align_field(lnum, padding, field)
-  local next_field = self.metrics:row({ lnum = lnum }).fields[column_index + 1]
+  local next_field = self.metrics:row({ lnum = lnum }):field(column_index + 1)
   if next_field then
     self:_render_delimiter(lnum, field, next_field)
   end
@@ -229,7 +229,7 @@ function View:_render_line(lnum)
     return
   end
 
-  if row.is_comment then
+  if row.type == "comment" then
     self:_highlight_comment(lnum)
     return
   end
@@ -239,8 +239,38 @@ function View:_render_line(lnum)
     self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 
+  -- TODO refactor this
+  if row.type == "multiline_continuation" then
+    local padding = 0
+    local field_start_lnum = lnum - row.start_field_offset
+    for i = row.skipped_ncol, 1, -1 do
+      local column = self.metrics:column(i)
+      if column then
+        padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + self.opts.view.spacing
+
+        local field_start_row = self.metrics:row({ lnum = field_start_lnum })
+        local start_row_field = field_start_row:field(i)
+        local start_row_next_field = field_start_row:field(i + 1)
+        if start_row_field and start_row_next_field then
+          padding = padding + (start_row_next_field.offset - (start_row_field.offset + start_row_field.len))
+        end
+
+        if field_start_row.type == "multiline_continuation" then
+          field_start_lnum = field_start_lnum - field_start_row.start_field_offset
+        end
+      end
+    end
+
+    local pad = { { string.rep(" ", padding) } }
+    self:_add_extmark(lnum, 0, {
+      virt_text = pad,
+      virt_text_pos = "inline",
+      right_gravity = false,
+    })
+  end
+
   -- render fields
-  for column_index, field in ipairs(row.fields) do
+  for column_index, field in row:iter() do
     local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })

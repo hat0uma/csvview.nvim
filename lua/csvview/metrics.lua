@@ -1,39 +1,56 @@
 local nop = function() end
 
---- @class CsvView.Metrics.Row
---- @field is_comment boolean
---- @field fields CsvView.Metrics.Field[]
-local CsvViewMetricsRow = {}
+-----------------------------------------------------------------------------
+-- Row types
+-----------------------------------------------------------------------------
 
---- Create a new CsvView.Metrics.Row instance
----@param is_comment boolean
----@param fields CsvView.Parser.FieldInfo[]
----@return CsvView.Metrics.Row
-function CsvViewMetricsRow:new(is_comment, fields)
-  self.__index = self
+--- @class CsvView.Metrics.CommentRow
+--- @field type "comment"
+local CommentRow = {}
+CommentRow.__index = CommentRow
 
-  local obj = {}
-  obj.is_comment = is_comment
-  obj.fields = fields or {}
-  setmetatable(obj, self)
-  return obj
-end
+--- @class CsvView.Metrics.MultilineStartRow
+--- @field type "multiline_start"
+--- @field _fields CsvView.Metrics.Field[]
+--- @field end_loffset integer -- relative end line offset
+local MultilineStartRow = {}
+MultilineStartRow.__index = MultilineStartRow
 
+---
+--- @class CsvView.Metrics.MultilineContinuationRow
+--- @field type "multiline_continuation"
+---
+---
+--- @field _fields CsvView.Metrics.Field[]
+---
+--- example:
+--- abc,def,"gh <--- type="multiline_start", end_loffset=4
+--- i",jkl,"m   <--- type="multiline_continuation", start_loffset=1, start_field_offset=1, skipped_ncol=2
+--- n           <--- type="multiline_continuation", start_loffset=2, start_field_offset=1, skipped_ncol=2
+--- o           <--- type="multiline_continuation", start_loffset=3, start_field_offset=2, skipped_ncol=4
+--- p"          <--- type="multiline_continuation", start_loffset=4, start_field_offset=3, skipped_ncol=4
+--- @field start_loffset integer -- relative start line offset
+--- @field start_field_offset integer -- relative start field offset
+--- @field skipped_ncol integer -- column number that was skipped in the continuation row
+local MultilineContinuationRow = {}
+MultilineContinuationRow.__index = MultilineContinuationRow
+
+--- @class CsvView.Metrics.SinglelineRow
+--- @field type "singleline"
+--- @field _fields CsvView.Metrics.Field[] -- empty for comment rows
+local SinglelineRow = {}
+SinglelineRow.__index = SinglelineRow
+
+--- @alias CsvView.Metrics.Row
+--- | CsvView.Metrics.CommentRow
+--- | CsvView.Metrics.MultilineStartRow
+--- | CsvView.Metrics.MultilineContinuationRow
+--- | CsvView.Metrics.SinglelineRow
+
+-----------------------------------------------------------------------------
+-- Metrics class
+-----------------------------------------------------------------------------
 --- Get field by byte offset
----@param offset integer
----@return integer column_idx
----@return CsvView.Metrics.Field field
-function CsvViewMetricsRow:get_field_by_offset(offset)
-  local len = #self.fields
-  for i, field in ipairs(self.fields) do
-    if offset < field.offset then
-      return i - 1, self.fields[i - 1]
-    end
-  end
-
-  return len, self.fields[len]
-end
-
 --- @class CsvView.Metrics
 --- @field private _rows CsvView.Metrics.Row[]
 --- @field private _columns CsvView.Metrics.Column[]
@@ -117,11 +134,8 @@ end
 
 --- Get column metrics
 ---@param col_idx 1-indexed column index
----@return CsvView.Metrics.Column
+---@return CsvView.Metrics.Column?
 function CsvViewMetrics:column(col_idx)
-  if not self._columns[col_idx] then
-    error(string.format("Column out of bounds col_idx=%d", col_idx))
-  end
   return self._columns[col_idx]
 end
 
@@ -150,6 +164,9 @@ end
 function CsvViewMetrics:update(first, prev_last, last, on_end)
   on_end = on_end or nop
 
+  -- Get the range of logical CSV rows for the changed lines
+  local start_reparse, end_reparse = self:find_logical_row_range(first + 1)
+
   ---@type table<integer,boolean>
   local recalculate_columns = {}
 
@@ -163,7 +180,7 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   end
 
   -- update metrics
-  self:_compute_metrics(first + 1, last, recalculate_columns, on_end)
+  self:_compute_metrics(start_reparse, math.max(end_reparse, last), recalculate_columns, on_end)
 end
 
 --- Get row metrics by line number
@@ -196,13 +213,15 @@ end
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
   self._parser:parse_lines({
-    on_line = function(lnum, is_comment, fields)
+    on_line = function(lnum, is_comment, fields, parsed_endlnum)
       local prev_row = self._rows[lnum]
+      self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum)
 
       -- Update row metrics and adjust column metrics
-      self._rows[lnum] = self:_compute_metrics_for_row(lnum, is_comment, fields)
-      self:_mark_recalculation_on_decrease_fields(lnum, prev_row, recalculate_columns)
-      self:_adjust_column_metrics_for_row(lnum, recalculate_columns)
+      for i = lnum, parsed_endlnum do
+        self:_mark_recalculation_on_decrease_fields(i, prev_row, recalculate_columns)
+        self:_adjust_column_metrics_for_row(i, recalculate_columns)
+      end
     end,
     on_end = function(err)
       if err then
@@ -225,46 +244,69 @@ end
 --- Compute row metrics
 ---@param lnum integer line number
 ---@param is_comment boolean
----@param fields CsvView.Parser.FieldInfo[]
----@return CsvView.Metrics.Row
-function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, fields)
-  local row = CsvViewMetricsRow:new(is_comment, {})
+---@param parsed_fields CsvView.Parser.FieldInfo[]
+---@param parsed_endlnum integer end line number of the parsed row
+function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields, parsed_endlnum)
   if is_comment then
-    return row
+    self._rows[lnum] = CommentRow:new()
+    return
   end
 
-  -- Compute field metrics
-  for _, field in ipairs(fields) do
-    local width = self:_field_display_width(field)
-    table.insert(row.fields, {
-      offset = field.start_pos - 1,
-      len = #field.text,
-      display_width = width,
-      is_number = tonumber(field.text) ~= nil,
-    })
-  end
-  return row
-end
+  if parsed_endlnum == lnum then -- Single line row
+    local row = SinglelineRow:new({})
+    for _, field in ipairs(parsed_fields) do
+      local field_text = field.text
+      assert(type(field_text) == "string")
 
---- Get the display width of the field
----@param field CsvView.Parser.FieldInfo
----@return integer
-function CsvViewMetrics:_field_display_width(field)
-  local text = field.text
-  local max_width ---@type integer
-  if type(text) == "table" then
-    -- This is multi-line field. Get the width of the longest line.
-    for _, line in ipairs(text) do
-      local line_width = vim.fn.strdisplaywidth(line)
-      if line_width > max_width then
-        max_width = line_width
-      end
+      local width = vim.fn.strdisplaywidth(field_text)
+      row:append({
+        offset = field.start_pos - 1,
+        len = #field.text,
+        display_width = width,
+        is_number = tonumber(field.text) ~= nil,
+      })
     end
-  else
-    max_width = vim.fn.strdisplaywidth(text)
+    self._rows[lnum] = row
+    return
   end
 
-  return max_width
+  -- Multi-line row
+  local start_row = MultilineStartRow:new({}, parsed_endlnum - lnum)
+  local index = lnum
+  self._rows[index] = start_row
+  for field_index, field in ipairs(parsed_fields) do
+    local field_text = field.text
+
+    if type(field_text) == "table" then
+      -- Multi-line field
+      local field_start_lnum = index
+      for i, text in ipairs(field_text) do
+        -- first line starts at field.start_pos, others are 0
+        local offset = i == 1 and field.start_pos - 1 or 0
+        local width = vim.fn.strdisplaywidth(text)
+        self._rows[index]:append({ offset = offset, len = #text, display_width = width, is_number = false })
+
+        -- Add next row
+        if i ~= #field_text then
+          index = index + 1
+          self._rows[index] = MultilineContinuationRow:new(
+            {},
+            index - lnum, -- relative start line offset
+            index - field_start_lnum, -- relative start field offset
+            field_index - 1
+          )
+        end
+      end
+    else
+      -- Single-line field
+      self._rows[index]:append({
+        offset = field.start_pos - 1,
+        len = #field.text,
+        display_width = vim.fn.strdisplaywidth(field_text),
+        is_number = tonumber(field.text) ~= nil,
+      })
+    end
+  end
 end
 
 --- Recalculate column metrics for the specified column
@@ -275,10 +317,10 @@ function CsvViewMetrics:_recalculate_column(col_idx)
 
   -- Find the maximum width in the column
   for row_idx, row in ipairs(self._rows) do
-    if not row.is_comment and row.fields[col_idx] then
-      local width = row.fields[col_idx].display_width
-      if width > max_width then
-        max_width = width
+    if row.type ~= "comment" then
+      local field = row:field(col_idx)
+      if field and field.display_width > max_width then
+        max_width = field.display_width
         max_row = row_idx
       end
     end
@@ -339,10 +381,13 @@ function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row
 
   local row = self._rows[row_idx]
 
-  for col_idx = #row.fields + 1, #prev_row.fields do
+  for col_idx, _ in prev_row:iter() do
     -- Check if the column exists and if the current row was the maximum width row for this column.
     if self._columns[col_idx] and self._columns[col_idx].max_row == row_idx then
-      recalculate_columns[col_idx] = true
+      local current_field = row:field(col_idx)
+      if not current_field then
+        recalculate_columns[col_idx] = true
+      end
     end
   end
 end
@@ -354,7 +399,7 @@ function CsvViewMetrics:_adjust_column_metrics_for_row(row_idx, recalculate_colu
   local row = self._rows[row_idx]
 
   -- Update column metrics
-  for col_idx, field in ipairs(row.fields) do
+  for col_idx, field in row:iter() do
     local column = self:_ensure_column(col_idx)
     local width = field.display_width
 
@@ -395,7 +440,7 @@ function CsvViewMetrics:_add_row_placeholders(start, num)
     self._rows[i + num] = self._rows[i]
   end
   for i = start, start + num - 1 do
-    self._rows[i] = CsvViewMetricsRow:new(false, {})
+    self._rows[i] = SinglelineRow:new({})
   end
 end
 
@@ -417,5 +462,159 @@ function CsvViewMetrics:_remove_rows(start, num)
     self._rows[i + num] = nil
   end
 end
+
+--- Find the start of the logical row containing the given physical line number
+---@param lnum integer physical line number
+---@return integer logical_start_lnum, integer logical_end_lnum
+function CsvViewMetrics:find_logical_row_range(lnum)
+  local row = self._rows[lnum]
+  if row.type == "multiline_continuation" then
+    local start_lnum = lnum - row.start_loffset
+    local endlnum = start_lnum + self._rows[start_lnum].end_loffset
+    return start_lnum, endlnum
+  elseif row.type == "multiline_start" then
+    return lnum, lnum + row.end_loffset
+  else
+    return lnum, lnum
+  end
+end
+
+----------------------------------------------------
+-- Row functions
+----------------------------------------------------
+
+---@param row CsvView.Metrics.Row
+---@param offset integer
+---@return integer column_idxr
+---@return CsvView.Metrics.Field field
+local function get_field_by_offset(row, offset)
+  local len = #row._fields
+  for i, field in ipairs(row._fields) do
+    if offset < field.offset then
+      local col_idx = i - 1
+      if row.type == "multiline_continuation" then
+        col_idx = row.skipped_ncol + col_idx
+      end
+
+      return col_idx, row._fields[i - 1]
+    end
+  end
+
+  return len, row._fields[len]
+end
+
+--- Iterate over fields in the row
+---@param row CsvView.Metrics.Row
+---@return fun():integer?,CsvView.Metrics.Field?
+local function iter(row)
+  local i = 0
+  return function()
+    i = i + 1
+    if i > #row._fields then
+      return nil, nil
+    end
+
+    if row.type == "multiline_continuation" then
+      return row.skipped_ncol + i, row._fields[i]
+    else
+      return i, row._fields[i]
+    end
+  end
+end
+
+--- Iterate over fields in the row
+---@param row CsvView.Metrics.Row
+---@param field CsvView.Metrics.Field
+local function append(row, field)
+  table.insert(row._fields, field)
+end
+
+--- Get field by column index
+--- @param row CsvView.Metrics.Row
+--- @param col_idx integer 1-indexed column index
+--- @return CsvView.Metrics.Field?
+local function field(row, col_idx)
+  if row.type == "comment" then
+    return nil
+  end
+
+  if row.type == "multiline_continuation" then
+    col_idx = col_idx - row.skipped_ncol
+  end
+  return row._fields[col_idx]
+end
+
+--- Get the number of fields in the row
+--- @param row CsvView.Metrics.Row
+--- @return integer
+local function field_count(row)
+  return #row._fields
+end
+
+--- Create a new MultilineContinuationRow instance
+--- @param fields CsvView.Metrics.Field[] fields in the row
+--- @param start_loffset integer relative start line offset
+--- @param start_field_offset integer relative start field offset
+--- @param skipped_ncol integer column number that was skipped in the continuation row
+--- @return CsvView.Metrics.MultilineContinuationRow
+function MultilineContinuationRow:new(fields, start_loffset, start_field_offset, skipped_ncol)
+  local obj = {}
+  obj.type = "multiline_continuation"
+  obj._fields = fields
+  obj.start_loffset = start_loffset
+  obj.start_field_offset = start_field_offset
+  obj.skipped_ncol = skipped_ncol
+  return setmetatable(obj, self)
+end
+MultilineContinuationRow.get_field_by_offset = get_field_by_offset
+MultilineContinuationRow.iter = iter
+MultilineContinuationRow.append = append
+MultilineContinuationRow.field = field
+MultilineContinuationRow.field_count = field_count
+
+--- Create a new CommentRow instance
+--- @return CsvView.Metrics.CommentRow
+function CommentRow:new()
+  local obj = {}
+  obj.type = "comment"
+  return setmetatable(obj, self)
+end
+CommentRow.get_field_by_offset = get_field_by_offset
+CommentRow.iter = iter
+CommentRow.append = append
+CommentRow.field = field
+CommentRow.field_count = field_count
+
+--- Create a new SinglelineRow instance
+--- @param fields CsvView.Metrics.Field[] fields in the row
+---@return CsvView.Metrics.SinglelineRow
+function SinglelineRow:new(fields)
+  local obj = {}
+  obj.type = "singleline"
+  obj._fields = fields
+  return setmetatable(obj, self)
+end
+SinglelineRow.get_field_by_offset = get_field_by_offset
+SinglelineRow.iter = iter
+SinglelineRow.append = append
+SinglelineRow.field = field
+SinglelineRow.field_count = field_count
+
+--- Create a new MultilineStartRow instance
+--- @param fields CsvView.Metrics.Field[] fields in the row
+--- @param end_loffset integer relative end line offset
+--- @return CsvView.Metrics.MultilineStartRow
+function MultilineStartRow:new(fields, end_loffset)
+  local obj = {}
+  obj.type = "multiline_start"
+  obj._fields = fields or {}
+  obj.end_loffset = end_loffset
+  return setmetatable(obj, self)
+end
+MultilineStartRow.get_field_by_offset = get_field_by_offset
+MultilineStartRow.iter = iter
+MultilineStartRow.append = append
+MultilineStartRow.field = field
+MultilineStartRow.field_count = field_count
 
 return CsvViewMetrics
