@@ -189,8 +189,9 @@ end
 --- Render field in line
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
+---@param disable_highlight boolean
 ---@param field CsvView.Metrics.Field
-function View:_render_field(lnum, column_index, field)
+function View:_render_field(lnum, column_index, field, disable_highlight)
   local column = self.metrics:column(column_index)
   if not column then
     -- not computed yet.
@@ -201,7 +202,9 @@ function View:_render_field(lnum, column_index, field)
   local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
 
-  self:_highlight_field(lnum, column_index, field)
+  if not disable_highlight then
+    self:_highlight_field(lnum, column_index, field)
+  end
   self:_align_field(lnum, padding, field)
   local next_field = self.metrics:row({ lnum = lnum }):field(column_index + 1)
   if next_field then
@@ -271,7 +274,24 @@ function View:_render_line(lnum)
 
   -- render fields
   for column_index, field in row:iter() do
-    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
+    -- TODO: refactor this
+    -- disable highlight if field is not terminated (closing quote not found)
+    local disable_highlight = false
+    if row.type == "multiline_start" and not row.terminated then
+      local end_row = self.metrics:row({ lnum = lnum + row.end_loffset })
+      local last_field_index = end_row.skipped_ncol + end_row:field_count()
+      disable_highlight = column_index == last_field_index
+    elseif row.type == "multiline_continuation" and not row.terminated then
+      local start_row_lnum = lnum - row.start_loffset
+      local start_row = self.metrics:row({ lnum = start_row_lnum })
+      local end_row = self.metrics:row({ lnum = start_row_lnum + start_row.end_loffset })
+      local last_field_index = end_row.skipped_ncol + end_row:field_count()
+      disable_highlight = column_index == last_field_index
+    end
+
+    -- render fields
+    local ok, err =
+      xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field, disable_highlight)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })
     end

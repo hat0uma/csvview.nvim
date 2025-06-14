@@ -13,6 +13,7 @@ CommentRow.__index = CommentRow
 --- @field type "multiline_start"
 --- @field _fields CsvView.Metrics.Field[]
 --- @field end_loffset integer -- relative end line offset
+--- @field terminated boolean -- whether the row is terminated, if false, parser reached lookahead limit
 local MultilineStartRow = {}
 MultilineStartRow.__index = MultilineStartRow
 
@@ -32,6 +33,7 @@ MultilineStartRow.__index = MultilineStartRow
 --- @field start_loffset integer -- relative start line offset
 --- @field start_field_offset integer -- relative start field offset
 --- @field skipped_ncol integer -- column number that was skipped in the continuation row
+--- @field terminated boolean -- whether the row is terminated, if false, parser reached lookahead limit
 local MultilineContinuationRow = {}
 MultilineContinuationRow.__index = MultilineContinuationRow
 
@@ -57,6 +59,7 @@ SinglelineRow.__index = SinglelineRow
 --- @field private _bufnr integer
 --- @field private _opts CsvView.InternalOptions
 --- @field private _parser CsvView.Parser
+--- @field private _current_parse { cancelled: boolean }?
 local CsvViewMetrics = {}
 
 --- @class CsvView.Metrics.Column
@@ -164,6 +167,11 @@ end
 function CsvViewMetrics:update(first, prev_last, last, on_end)
   on_end = on_end or nop
 
+  if self._current_parse then
+    self._current_parse.cancelled = true
+  end
+  self._current_parse = { cancelled = false }
+
   -- Get the range of logical CSV rows for the changed lines
   local start_reparse, end_reparse = self:find_logical_row_range(first + 1)
 
@@ -213,9 +221,9 @@ end
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
   self._parser:parse_lines({
-    on_line = function(lnum, is_comment, fields, parsed_endlnum)
+    on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
       local prev_row = self._rows[lnum]
-      self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum)
+      self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum, terminated)
 
       -- Update row metrics and adjust column metrics
       for i = lnum, parsed_endlnum do
@@ -224,6 +232,12 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       end
     end,
     on_end = function(err)
+      if err == "cancelled" then
+        -- If the job was cancelled, do not update metrics.
+        on_end()
+        return
+      end
+
       if err then
         on_end(err)
         return
@@ -238,7 +252,7 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
       -- notify the end of the update
       on_end()
     end,
-  }, startlnum, endlnum)
+  }, startlnum, endlnum, self._current_parse)
 end
 
 --- Compute row metrics
@@ -246,7 +260,8 @@ end
 ---@param is_comment boolean
 ---@param parsed_fields CsvView.Parser.FieldInfo[]
 ---@param parsed_endlnum integer end line number of the parsed row
-function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields, parsed_endlnum)
+---@param terminated boolean whether the row is terminated, if false, parser reached lookahead limit
+function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields, parsed_endlnum, terminated)
   if is_comment then
     self._rows[lnum] = CommentRow:new()
     return
@@ -271,7 +286,7 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
   end
 
   -- Multi-line row
-  local start_row = MultilineStartRow:new({}, parsed_endlnum - lnum)
+  local start_row = MultilineStartRow:new({}, parsed_endlnum - lnum, terminated)
   local index = lnum
   self._rows[index] = start_row
   for field_index, field in ipairs(parsed_fields) do
@@ -293,7 +308,8 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
             {},
             index - lnum, -- relative start line offset
             index - field_start_lnum, -- relative start field offset
-            field_index - 1
+            field_index - 1,
+            terminated
           )
         end
       end
@@ -551,27 +567,6 @@ local function field_count(row)
   return #row._fields
 end
 
---- Create a new MultilineContinuationRow instance
---- @param fields CsvView.Metrics.Field[] fields in the row
---- @param start_loffset integer relative start line offset
---- @param start_field_offset integer relative start field offset
---- @param skipped_ncol integer column number that was skipped in the continuation row
---- @return CsvView.Metrics.MultilineContinuationRow
-function MultilineContinuationRow:new(fields, start_loffset, start_field_offset, skipped_ncol)
-  local obj = {}
-  obj.type = "multiline_continuation"
-  obj._fields = fields
-  obj.start_loffset = start_loffset
-  obj.start_field_offset = start_field_offset
-  obj.skipped_ncol = skipped_ncol
-  return setmetatable(obj, self)
-end
-MultilineContinuationRow.get_field_by_offset = get_field_by_offset
-MultilineContinuationRow.iter = iter
-MultilineContinuationRow.append = append
-MultilineContinuationRow.field = field
-MultilineContinuationRow.field_count = field_count
-
 --- Create a new CommentRow instance
 --- @return CsvView.Metrics.CommentRow
 function CommentRow:new()
@@ -586,7 +581,7 @@ CommentRow.field = field
 CommentRow.field_count = field_count
 
 --- Create a new SinglelineRow instance
---- @param fields CsvView.Metrics.Field[] fields in the row
+---@param fields CsvView.Metrics.Field[] fields in the row
 ---@return CsvView.Metrics.SinglelineRow
 function SinglelineRow:new(fields)
   local obj = {}
@@ -603,12 +598,15 @@ SinglelineRow.field_count = field_count
 --- Create a new MultilineStartRow instance
 --- @param fields CsvView.Metrics.Field[] fields in the row
 --- @param end_loffset integer relative end line offset
+--- @param terminated boolean whether the row is terminated, if false, parser reached lookahead limit
 --- @return CsvView.Metrics.MultilineStartRow
-function MultilineStartRow:new(fields, end_loffset)
+function MultilineStartRow:new(fields, end_loffset, terminated)
   local obj = {}
   obj.type = "multiline_start"
   obj._fields = fields or {}
   obj.end_loffset = end_loffset
+  obj.terminated = terminated
+
   return setmetatable(obj, self)
 end
 MultilineStartRow.get_field_by_offset = get_field_by_offset
@@ -616,5 +614,28 @@ MultilineStartRow.iter = iter
 MultilineStartRow.append = append
 MultilineStartRow.field = field
 MultilineStartRow.field_count = field_count
+
+--- Create a new MultilineContinuationRow instance
+--- @param fields CsvView.Metrics.Field[] fields in the row
+--- @param start_loffset integer relative start line offset
+--- @param start_field_offset integer relative start field offset
+--- @param skipped_ncol integer column number that was skipped in the continuation row
+--- @param terminated boolean whether the row is terminated, if false, parser reached lookahead limit
+--- @return CsvView.Metrics.MultilineContinuationRow
+function MultilineContinuationRow:new(fields, start_loffset, start_field_offset, skipped_ncol, terminated)
+  local obj = {}
+  obj.type = "multiline_continuation"
+  obj._fields = fields
+  obj.start_loffset = start_loffset
+  obj.start_field_offset = start_field_offset
+  obj.skipped_ncol = skipped_ncol
+  obj.terminated = terminated
+  return setmetatable(obj, self)
+end
+MultilineContinuationRow.get_field_by_offset = get_field_by_offset
+MultilineContinuationRow.iter = iter
+MultilineContinuationRow.append = append
+MultilineContinuationRow.field = field
+MultilineContinuationRow.field_count = field_count
 
 return CsvViewMetrics
