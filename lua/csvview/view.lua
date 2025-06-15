@@ -277,14 +277,8 @@ function View:_render_line(lnum)
     -- TODO: refactor this
     -- disable highlight if field is not terminated (closing quote not found)
     local disable_highlight = false
-    if row.type == "multiline_start" and not row.terminated then
+    if (row.type == "multiline_start" or row.type == "multiline_continuation") and not row.terminated then
       local end_row = self.metrics:row({ lnum = lnum + row.end_loffset })
-      local last_field_index = end_row.skipped_ncol + end_row:field_count()
-      disable_highlight = column_index == last_field_index
-    elseif row.type == "multiline_continuation" and not row.terminated then
-      local start_row_lnum = lnum - row.start_loffset
-      local start_row = self.metrics:row({ lnum = start_row_lnum })
-      local end_row = self.metrics:row({ lnum = start_row_lnum + start_row.end_loffset })
       local last_field_index = end_row.skipped_ncol + end_row:field_count()
       disable_highlight = column_index == last_field_index
     end
