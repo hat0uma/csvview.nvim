@@ -60,10 +60,9 @@ function M.enable(bufnr, opts)
         })
       else
         -- Handle normal buffer update events
-        -- TODO: Process the case where the next update comes before the current update is completed
         view:lock()
         metrics:update(first, last, last_updated, function(err)
-          if err then
+          if err and err ~= "cancelled" then
             vim.notify("csvview: failed to update metrics: " .. err, vim.log.levels.ERROR)
             M.disable(bufnr)
             return
