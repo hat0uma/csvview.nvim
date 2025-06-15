@@ -222,14 +222,26 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns
   -- Parse specified range and update metrics.
   self._parser:parse_lines({
     on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
-      local prev_row = self._rows[lnum]
-      self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum, terminated)
+      local new_endlnum = nil ---@type integer
+      local rows = self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum, terminated)
+      assert(#rows == parsed_endlnum - lnum + 1, "Invalid number of rows computed")
 
-      -- Update row metrics and adjust column metrics
-      for i = lnum, parsed_endlnum do
-        self:_mark_recalculation_on_decrease_fields(i, prev_row, recalculate_columns)
-        self:_adjust_column_metrics_for_row(i, recalculate_columns)
+      -- -- Update row metrics and adjust column metrics
+      for i, row in ipairs(rows) do
+        local line = lnum + i - 1
+        local prev_row = self._rows[line]
+        self._rows[line] = row
+
+        if prev_row and prev_row.type == "multiline_start" and row.type == "multiline_continuation" then
+          --- If the structure of the multi-line field is broken, it affects all subsequent rows,
+          --- so all rows need to be recalculated.
+          new_endlnum = vim.api.nvim_buf_line_count(self._bufnr)
+        end
+
+        self:_mark_recalculation_on_decrease_fields(line, prev_row, recalculate_columns)
+        self:_adjust_column_metrics_for_row(line, recalculate_columns)
       end
+      return new_endlnum
     end,
     on_end = function(err)
       if err == "cancelled" then
@@ -261,10 +273,10 @@ end
 ---@param parsed_fields CsvView.Parser.FieldInfo[]
 ---@param parsed_endlnum integer end line number of the parsed row
 ---@param terminated boolean whether the row is terminated, if false, parser reached lookahead limit
+---@return CsvView.Metrics.Row[]
 function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields, parsed_endlnum, terminated)
   if is_comment then
-    self._rows[lnum] = CommentRow:new()
-    return
+    return { CommentRow:new() }
   end
 
   if parsed_endlnum == lnum then -- Single line row
@@ -281,14 +293,13 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
         is_number = tonumber(field.text) ~= nil,
       })
     end
-    self._rows[lnum] = row
-    return
+    return { row }
   end
 
   -- Multi-line row
   local start_row = MultilineStartRow:new({}, parsed_endlnum - lnum, terminated)
-  local index = lnum
-  self._rows[index] = start_row
+  local index = 1
+  local rows = { start_row } --- @type CsvView.Metrics.Row[]
   for field_index, field in ipairs(parsed_fields) do
     local field_text = field.text
 
@@ -299,14 +310,14 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
         -- first line starts at field.start_pos, others are 0
         local offset = i == 1 and field.start_pos - 1 or 0
         local width = vim.fn.strdisplaywidth(text)
-        self._rows[index]:append({ offset = offset, len = #text, display_width = width, is_number = false })
+        rows[index]:append({ offset = offset, len = #text, display_width = width, is_number = false })
 
         -- Add next row
         if i ~= #field_text then
           index = index + 1
-          self._rows[index] = MultilineContinuationRow:new(
+          rows[index] = MultilineContinuationRow:new(
             {},
-            index - lnum, -- relative start line offset
+            index - 1, -- relative start line offset
             index - field_start_lnum, -- relative start field offset
             field_index - 1,
             terminated
@@ -315,7 +326,7 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
       end
     else
       -- Single-line field
-      self._rows[index]:append({
+      rows[index]:append({
         offset = field.start_pos - 1,
         len = #field.text,
         display_width = vim.fn.strdisplaywidth(field_text),
@@ -323,6 +334,7 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
       })
     end
   end
+  return rows
 end
 
 --- Recalculate column metrics for the specified column

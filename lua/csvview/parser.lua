@@ -4,9 +4,17 @@ local errors = require("csvview.errors")
 ---@field start_pos integer 1-based start position of the fields
 ---@field text string|string[] the text of the field. if the field is a quoted field, it will be a string array.
 
+---
 ---@class Csvview.Parser.Callbacks
----@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[], endlnum: integer, terminated:boolean) the callback to be called for each parsed line
----@field on_end fun(err?:string) the callback to be called when parsing is done. "cancelled" if cancelled, or an error message if an error occurred.
+---
+--- the callback to be called for each parsed line
+--- If the callback returns a new end line number, the parser will continue parsing until that line.
+---@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[], endlnum: integer, terminated:boolean): integer?
+---
+--- the callback to be called when parsing is done.
+--- If an error occurs, the `err` parameter will be a string with the error message.
+--- "cancelled" will be passed if the parsing was cancelled.
+---@field on_end fun(err?:string)
 
 ---@class CsvView.Parser.DelimiterPolicy
 ---@field match fun(s:string, pos:integer, char:integer, match_count:integer): CsvView.Parser.DelimiterPolicy.MatchState
@@ -288,8 +296,11 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum, cancel_token)
     local chunk_end = math.min(current_lnum + self._opts.parser.async_chunksize - 1, endlnum)
     while current_lnum <= chunk_end do
       local is_comment, fields, parse_endlnum, closed = self:_parse_line(current_lnum)
-      cb.on_line(current_lnum, is_comment, fields, parse_endlnum, closed)
+      local new_endlnum = cb.on_line(current_lnum, is_comment, fields, parse_endlnum, closed)
       current_lnum = parse_endlnum + 1
+      if new_endlnum then
+        endlnum = new_endlnum
+      end
     end
 
     if current_lnum <= endlnum then
