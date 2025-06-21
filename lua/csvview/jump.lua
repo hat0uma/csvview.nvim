@@ -137,12 +137,10 @@ local function get_jump_destination(bufnr, metrics, opts)
       local direction = (row_delta > 0) and 1 or -1
       row_idx = move_to_next_row(metrics, row_idx, col_idx, direction)
     end
-    print("row_idx: " .. row_idx .. ", col_idx: " .. col_idx .. ", col_delta: " .. col_delta)
 
     -- Calculate column
     if opts.col_wrap then
       row_idx, col_idx = wrap_column(metrics, row_idx, col_idx, col_delta)
-      print("row_idx: " .. row_idx .. ", col_idx: " .. col_idx .. ", col_delta: " .. col_delta)
     else
       col_idx = col_idx + col_delta
     end
