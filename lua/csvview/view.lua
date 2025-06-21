@@ -189,9 +189,8 @@ end
 --- Render field in line
 ---@param lnum integer 1-indexed lnum
 ---@param column_index 1-indexed column index
----@param disable_highlight boolean
 ---@param field CsvView.Metrics.Field
-function View:_render_field(lnum, column_index, field, disable_highlight)
+function View:_render_field(lnum, column_index, field)
   local column = self.metrics:column(column_index)
   if not column then
     -- not computed yet.
@@ -202,7 +201,7 @@ function View:_render_field(lnum, column_index, field, disable_highlight)
   local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
   local padding = colwidth - field.display_width + self.opts.view.spacing
 
-  if not disable_highlight then
+  if self:_field_terminated(lnum, column_index) then
     self:_highlight_field(lnum, column_index, field)
   end
   self:_align_field(lnum, padding, field)
@@ -242,29 +241,10 @@ function View:_render_line(lnum)
     self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 
-  -- TODO refactor this
+  -- Add padding for multiline continuation rows
   if row.type == "multiline_continuation" then
-    local padding = 0
-    local field_start_lnum = lnum - row.start_field_offset
-    for i = row.skipped_ncol, 1, -1 do
-      local column = self.metrics:column(i)
-      if column then
-        padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + self.opts.view.spacing
-
-        local field_start_row = self.metrics:row({ lnum = field_start_lnum })
-        local start_row_field = field_start_row:field(i)
-        local start_row_next_field = field_start_row:field(i + 1)
-        if start_row_field and start_row_next_field then
-          padding = padding + (start_row_next_field.offset - (start_row_field.offset + start_row_field.len))
-        end
-
-        if field_start_row.type == "multiline_continuation" then
-          field_start_lnum = field_start_lnum - field_start_row.start_field_offset
-        end
-      end
-    end
-
-    local pad = { { string.rep(" ", padding) } }
+    local padlen = self:_calculate_padding_for_multiline(lnum, row)
+    local pad = { { string.rep(" ", padlen) } }
     self:_add_extmark(lnum, 0, {
       virt_text = pad,
       virt_text_pos = "inline",
@@ -274,22 +254,62 @@ function View:_render_line(lnum)
 
   -- render fields
   for column_index, field in row:iter() do
-    -- TODO: refactor this
-    -- disable highlight if field is not terminated (closing quote not found)
-    local disable_highlight = false
-    if (row.type == "multiline_start" or row.type == "multiline_continuation") and not row.terminated then
-      local end_row = self.metrics:row({ lnum = lnum + row.end_loffset })
-      local last_field_index = end_row.skipped_ncol + end_row:field_count()
-      disable_highlight = column_index == last_field_index
-    end
-
-    -- render fields
-    local ok, err =
-      xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field, disable_highlight)
+    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
     if not ok then
       errors.error_with_context(err, { lnum = lnum, column_index = column_index })
     end
   end
+end
+
+--- Check if the field is terminated.
+--- This is used to determine if a quoted field is properly closed.
+---@param lnum integer 1-indexed lnum
+---@param column_index integer 1-indexed column index
+---@return boolean
+function View:_field_terminated(lnum, column_index)
+  local row = self.metrics:row({ lnum = lnum })
+  if not row then
+    return false
+  end
+
+  -- if row is not multiline, it is always terminated
+  if row.type ~= "multiline_start" and row.type ~= "multiline_continuation" then
+    return true
+  end
+
+  if row.terminated then
+    return true
+  end
+
+  local end_row = self.metrics:row({ lnum = lnum + row.end_loffset })
+  local last_field_index = end_row.skipped_ncol + end_row:field_count()
+  return column_index == last_field_index
+end
+
+--- Calculate padding for multiline row
+--- This is used to align multiline continuation rows with the first row.
+--- @param lnum integer 1-indexed line number
+--- @param row CsvView.Metrics.MultilineContinuationRow
+--- @return integer padding
+function View:_calculate_padding_for_multiline(lnum, row)
+  local padding = 0
+  local ranges = self.metrics:get_logical_row_field_ranges(lnum)
+  for i = row.skipped_ncol, 1, -1 do
+    local column = self.metrics:column(i)
+    if column then
+      padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + self.opts.view.spacing
+    end
+
+    -- add padding for delimiters
+    local range = ranges[i]
+    local next_range = ranges[i + 1]
+    if range and next_range then
+      local delimiter_len = next_range.start_col - range.end_col - 1
+      padding = padding + delimiter_len
+    end
+  end
+
+  return padding
 end
 
 -------------------------------------------------------

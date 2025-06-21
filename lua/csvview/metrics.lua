@@ -174,7 +174,7 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   self._current_parse = { cancelled = false }
 
   -- Get the range of logical CSV rows for the changed lines
-  local start_reparse, end_reparse = self:find_logical_row_range(first + 1)
+  local start_reparse, end_reparse = self:get_logical_row_line_range(first + 1)
 
   ---@type table<integer,boolean>
   local recalculate_columns = {}
@@ -213,55 +213,6 @@ function CsvViewMetrics:_get_row_by_row_idx(row_idx)
   return self._rows[row_idx]
 end
 
---- Compute metrics
----
----@param startlnum integer? if present, compute only specified range
----@param endlnum integer? if present, compute only specified range
----@param recalculate_columns table<integer,boolean> recalculate specified columns
----@param on_end fun(err:string|nil) callback for when the update is complete
-function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
-  -- Parse specified range and update metrics.
-  self._parser:parse_lines({
-    on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
-      local new_endlnum = nil ---@type integer?
-      local rows = self:_compute_metrics_for_row(lnum, is_comment, fields, parsed_endlnum, terminated)
-      assert(#rows == parsed_endlnum - lnum + 1, "Invalid number of rows computed")
-
-      -- Update row metrics and adjust column metrics
-      for i, row in ipairs(rows) do
-        local line = lnum + i - 1
-        local prev_row = self._rows[line]
-        self._rows[line] = row
-
-        if prev_row and prev_row.type == "multiline_start" and row.type == "multiline_continuation" then
-          -- If the structure of the multi-line field is broken, it affects all subsequent rows,
-          -- so all rows need to be recalculated.
-          new_endlnum = vim.api.nvim_buf_line_count(self._bufnr) - 1
-        end
-
-        self:_mark_recalculation_on_decrease_fields(line, prev_row, recalculate_columns)
-        self:_adjust_column_metrics_for_row(line, recalculate_columns)
-      end
-      return new_endlnum
-    end,
-    on_end = function(err)
-      if err then
-        on_end(err)
-        return
-      end
-
-      -- Recalculate column metrics if necessary
-      -- vim.print("recalculate_columns", recalculate_columns)
-      for col_idx, _ in pairs(recalculate_columns) do
-        self:_recalculate_column(col_idx)
-      end
-
-      -- notify the end of the update
-      on_end()
-    end,
-  }, startlnum, endlnum, self._current_parse)
-end
-
 --- Compute row metrics
 ---@param lnum integer line number
 ---@param is_comment boolean
@@ -269,7 +220,7 @@ end
 ---@param parsed_endlnum integer end line number of the parsed row
 ---@param terminated boolean whether the row is terminated, if false, parser reached lookahead limit
 ---@return CsvView.Metrics.Row[]
-function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields, parsed_endlnum, terminated)
+local function construct_rows(lnum, is_comment, parsed_fields, parsed_endlnum, terminated)
   if is_comment then
     return { CommentRow:new() }
   end
@@ -331,6 +282,55 @@ function CsvViewMetrics:_compute_metrics_for_row(lnum, is_comment, parsed_fields
     end
   end
   return rows
+end
+
+--- Compute metrics
+---
+---@param startlnum integer? if present, compute only specified range
+---@param endlnum integer? if present, compute only specified range
+---@param recalculate_columns table<integer,boolean> recalculate specified columns
+---@param on_end fun(err:string|nil) callback for when the update is complete
+function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
+  -- Parse specified range and update metrics.
+  self._parser:parse_lines({
+    on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
+      local new_endlnum = nil ---@type integer?
+      local rows = construct_rows(lnum, is_comment, fields, parsed_endlnum, terminated)
+      assert(#rows == parsed_endlnum - lnum + 1, "Invalid number of rows computed")
+
+      -- Update row metrics and adjust column metrics
+      for i, row in ipairs(rows) do
+        local line = lnum + i - 1
+        local prev_row = self._rows[line]
+        self._rows[line] = row
+
+        if prev_row and prev_row.type == "multiline_start" and row.type == "multiline_continuation" then
+          -- If the structure of the multi-line field is broken, it affects all subsequent rows,
+          -- so all rows need to be recalculated.
+          new_endlnum = vim.api.nvim_buf_line_count(self._bufnr) - 1
+        end
+
+        self:_mark_recalculation_on_decrease_fields(line, prev_row, recalculate_columns)
+        self:_adjust_column_metrics_for_row(line, recalculate_columns)
+      end
+      return new_endlnum
+    end,
+    on_end = function(err)
+      if err then
+        on_end(err)
+        return
+      end
+
+      -- Recalculate column metrics if necessary
+      -- vim.print("recalculate_columns", recalculate_columns)
+      for col_idx, _ in pairs(recalculate_columns) do
+        self:_recalculate_column(col_idx)
+      end
+
+      -- notify the end of the update
+      on_end()
+    end,
+  }, startlnum, endlnum, self._current_parse)
 end
 
 --- Recalculate column metrics for the specified column
@@ -490,7 +490,7 @@ end
 --- Find the start of the logical row containing the given physical line number
 ---@param lnum integer physical line number
 ---@return integer logical_start_lnum, integer logical_end_lnum
-function CsvViewMetrics:find_logical_row_range(lnum)
+function CsvViewMetrics:get_logical_row_line_range(lnum)
   local row = self._rows[lnum]
   if row.type == "multiline_continuation" then
     local start_lnum = lnum - row.start_loffset
@@ -501,6 +501,82 @@ function CsvViewMetrics:find_logical_row_range(lnum)
   else
     return lnum, lnum
   end
+end
+
+--- @alias CsvView.Metrics.LogicalFieldRange { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
+
+--- Get field ranges for a logical row containing the given physical line number.
+---@param lnum integer Line number (1-based)
+---@return CsvView.Metrics.LogicalFieldRange[] ranges List of logical field ranges for the row
+function CsvViewMetrics:get_logical_row_field_ranges(lnum)
+  local row = self:row({ lnum = lnum })
+  local ranges = {} --- @type CsvView.Metrics.LogicalFieldRange[]
+
+  -- Handle comment or empty rows
+  if row.type == "comment" or row:field_count() == 0 then
+    return ranges
+  end
+
+  if row.type == "singleline" then
+    for _, field in row:iter() do
+      local range = { --- @type CsvView.Metrics.LogicalFieldRange
+        start_row = lnum,
+        start_col = field.offset,
+        end_row = lnum,
+        end_col = field.offset + field.len - 1,
+      }
+      table.insert(ranges, range)
+    end
+    return ranges
+  end
+
+  local logical_start_lnum, logical_end_lnum = self:get_logical_row_line_range(lnum)
+  for i = logical_start_lnum, logical_end_lnum do
+    local logical_row = self:row({ lnum = i })
+    for col_idx, field in logical_row:iter() do
+      if not ranges[col_idx] then
+        ranges[col_idx] = { --- @type CsvView.Metrics.LogicalFieldRange
+          start_row = i,
+          start_col = field.offset,
+          end_row = i,
+          end_col = field.offset + field.len - 1,
+        }
+      else
+        -- Extend the end row and column if this field continues on the same logical row
+        ranges[col_idx].end_row = i
+        ranges[col_idx].end_col = field.offset + field.len - 1
+      end
+    end
+  end
+
+  return ranges
+end
+
+--- Get the logical field range for a given line number and byte offset.
+---@param lnum integer Line number (1-based)
+---@param offset integer Byte offset within the line
+---@return integer col_idx Column index of the field containing the byte offset
+---@return CsvView.Metrics.LogicalFieldRange range Logical field range for the given line and offset
+function CsvViewMetrics:get_logical_field_by_offet(lnum, offset)
+  -- Convert the byte position to a column index
+  local ranges = self:get_logical_row_field_ranges(lnum)
+  local col_idx ---@type integer
+  for i = 2, #ranges do
+    if lnum < ranges[i].start_row then
+      col_idx = i - 1
+      break
+    end
+    if lnum == ranges[i].start_row and offset < ranges[i].start_col then
+      -- If the line number is the same but the byte position is before the start of this range
+      col_idx = i - 1
+      break
+    end
+  end
+  if not col_idx then
+    col_idx = #ranges
+  end
+
+  return col_idx, ranges[col_idx]
 end
 
 ----------------------------------------------------

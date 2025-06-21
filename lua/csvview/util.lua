@@ -3,89 +3,6 @@ local M = {}
 
 local buf = require("csvview.buf")
 
--- TODO move this to CsvView.Metrics
---- @alias CsvView.Metrics.LogicalFieldRange { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
-
--- TODO move this to CsvView.Metrics
---- Get logical field ranges for a given row.
----@param metrics CsvView.Metrics Metrics object for the CSV buffer
----@param lnum integer Line number (1-based)
----@return CsvView.Metrics.LogicalFieldRange[] ranges List of logical field ranges for the row
-function M._get_logical_field_ranges(metrics, lnum)
-  local row = metrics:row({ lnum = lnum })
-  local ranges = {} --- @type CsvView.Metrics.LogicalFieldRange[]
-
-  -- Handle comment or empty rows
-  if row.type == "comment" or row:field_count() == 0 then
-    return ranges
-  end
-
-  if row.type == "singleline" then
-    for _, field in row:iter() do
-      local range = { --- @type CsvView.Metrics.LogicalFieldRange
-        start_row = lnum,
-        start_col = field.offset,
-        end_row = lnum,
-        end_col = field.offset + field.len - 1,
-      }
-      table.insert(ranges, range)
-    end
-    return ranges
-  end
-
-  local logical_start_lnum, logical_end_lnum = metrics:find_logical_row_range(lnum)
-  for i = logical_start_lnum, logical_end_lnum do
-    local logical_row = metrics:row({ lnum = i })
-    for col_idx, field in logical_row:iter() do
-      if not ranges[col_idx] then
-        ranges[col_idx] = { --- @type CsvView.Metrics.LogicalFieldRange
-          start_row = i,
-          start_col = field.offset,
-          end_row = i,
-          end_col = field.offset + field.len - 1,
-        }
-      else
-        -- Extend the end row and column if this field continues on the same logical row
-        ranges[col_idx].end_row = i
-        ranges[col_idx].end_col = field.offset + field.len - 1
-      end
-    end
-  end
-
-  return ranges
-end
-
--- TODO move this to CsvView.Metrics
---- Get the logical field range for a given line number and byte offset.
----@param metrics CsvView.Metrics Metrics object for the CSV buffer
----@param lnum integer Line number (1-based)
----@param offset integer Byte offset within the line
----@return integer col_idx Column index of the field containing the byte offset
----@return CsvView.Metrics.LogicalFieldRange range Logical field range for the given line and offset
-function M._get_logical_field_by_offet(metrics, lnum, offset)
-  -- Convert the byte position to a column index
-  local ranges = M._get_logical_field_ranges(metrics, lnum)
-  local col_idx ---@type integer
-  for i = 2, #ranges do
-    if lnum < ranges[i].start_row then
-      -- If the line number is before the start of this range, we can stop
-      col_idx = i - 1
-      break
-    end
-    if lnum == ranges[i].start_row and offset < ranges[i].start_col then
-      -- If the line number is the same but the byte position is before the start of this range
-      col_idx = i - 1
-      break
-    end
-  end
-  if not col_idx then
-    -- If we didn't find a range, it means the cursor is in the last field
-    col_idx = #ranges
-  end
-
-  return col_idx, ranges[col_idx]
-end
-
 ---@class CsvView.Cursor
 ---@field kind "field" | "comment" | "empty_line" Cursor kind
 ---@field pos [integer,integer?] 1-based [row, col] csv coordinates
@@ -136,7 +53,7 @@ function M.get_cursor(bufnr)
     return { kind = "empty_line", pos = { lnum } }
   end
 
-  local col_idx, range = M._get_logical_field_by_offet(view.metrics, lnum, col_byte)
+  local col_idx, range = view.metrics:get_logical_field_by_offet(lnum, col_byte)
   local lines = vim.api.nvim_buf_get_text(
     bufnr,
     range.start_row - 1, -- Convert to 0-based index
