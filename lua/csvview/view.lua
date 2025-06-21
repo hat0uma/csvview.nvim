@@ -293,7 +293,7 @@ end
 --- @return integer padding
 function View:_calculate_padding_for_multiline(lnum, row)
   local padding = 0
-  local ranges = self.metrics:get_logical_row_field_ranges(lnum)
+  local ranges = self.metrics:get_logical_row_fields({ lnum = lnum })
   for i = row.skipped_ncol, 1, -1 do
     local column = self.metrics:column(i)
     if column then

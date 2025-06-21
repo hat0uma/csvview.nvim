@@ -12,15 +12,6 @@ local function clamp(value, min, max)
   return math.min(math.max(value, min), max)
 end
 
---- Returns whether the row at the specified index has a field.
----@param metrics CsvView.Metrics
----@param row_idx integer
----@return boolean
-local function has_field(metrics, row_idx)
-  local row = metrics:row({ row_idx = row_idx })
-  return not row.is_comment and #row.fields > 0
-end
-
 --- Wraps around columns when moving beyond the last column
 ---@param metrics CsvView.Metrics
 ---@param row_idx integer
@@ -28,7 +19,6 @@ end
 ---@param relative_col integer relative column offset
 ---@return integer row_idx, integer col_idx
 local function wrap_column(metrics, row_idx, col_idx, relative_col)
-  local row_count = metrics:row_count()
   local rest = math.abs(relative_col)
   local direction = (relative_col > 0) and 1 or -1
 
@@ -36,45 +26,43 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
   -- When moving to the right, if the end of the line is reached, move to the first column of the next line
   -- When moving to the left, if the start of the line is reached, move to the last column of the previous line
   while rest > 0 do
-    local row = metrics:row({ row_idx = row_idx })
-    if not row then
+    local row_idx_valid, fields = pcall(metrics.get_logical_row_fields, metrics, { row_idx = row_idx })
+    if not row_idx_valid then
       break
     end
 
     -- When moving to the left and trying to move before the first column
     if col_idx + direction < 1 then
-      if row_idx == 1 then
-        -- Already at the first row, clamp to first col
-        row_idx = 1
-        col_idx = 1
-        break
-      end
-
       -- Move to the previous row
       row_idx = row_idx - 1
 
       -- If there is at least one field in the previous row, move to the last column of that row
       -- If there are no fields, do not decrease the number of moves, and check the previous row again in the next loop.
-      if has_field(metrics, row_idx) then
-        col_idx = #metrics:row({ row_idx = row_idx }).fields
+      local new_row_idx_valid, prev_row_fields = pcall(metrics.get_logical_row_fields, metrics, { row_idx = row_idx })
+      if not new_row_idx_valid then
+        row_idx = 1
+        col_idx = 1
+        break
+      end
+
+      if #prev_row_fields > 0 then
+        col_idx = #prev_row_fields
         rest = rest - 1
       end
 
     -- When moving to the right and trying to move beyond the last column
-    elseif col_idx + direction > #row.fields then
-      if row_idx == row_count then
-        -- Already at the last row, clamp to last col
-        row_idx = row_count
-        col_idx = #row.fields
-        break
-      end
-
+    elseif col_idx + direction > #fields then
       -- Move to the next row
       row_idx = row_idx + 1
 
       -- If there is at least one field in the next row, move to the first column of that row
       -- If there are no fields, do not decrease the number of moves, and check the next row again in the next loop.
-      if has_field(metrics, row_idx) then
+      local new_row_idx_valid, next_row_fields = pcall(metrics.get_logical_row_fields, metrics, { row_idx = row_idx })
+      if not new_row_idx_valid then
+        col_idx = #fields
+        break
+      end
+      if #next_row_fields > 0 then
         col_idx = 1
         rest = rest - 1
       end
@@ -92,9 +80,10 @@ local function wrap_column(metrics, row_idx, col_idx, relative_col)
   -- but if the end of the line is empty, you cannot jump because there is no delimiter behind it. Move one more column.
   --
   if col_idx ~= 0 then
-    local row = metrics:row({ row_idx = row_idx })
-    local is_last_col = col_idx == #row.fields
-    local is_empty_field = row.fields[col_idx].len == 0
+    local fields = metrics:get_logical_row_fields({ row_idx = row_idx })
+    local is_last_col = col_idx == #fields
+    local is_empty_field = fields[col_idx].start_row == fields[col_idx].end_row
+      and fields[col_idx].start_col == fields[col_idx].end_col
     if is_last_col and is_empty_field then
       row_idx, col_idx = wrap_column(metrics, row_idx, col_idx, direction)
     end
@@ -110,22 +99,15 @@ end
 ---@param direction integer
 ---@return integer
 local function move_to_next_row(metrics, row_idx, col_idx, direction)
-  local row_count = metrics:row_count()
-  local row = metrics:row({ row_idx = row_idx })
-  if not row then
-    return row_idx
-  end
-
   local next_row_idx = row_idx
   while true do
     next_row_idx = next_row_idx + direction
-    local is_row_idx_valid = next_row_idx >= 1 and next_row_idx <= row_count
-    if not is_row_idx_valid then
+    local next_row_idx_valid, ranges = pcall(metrics.get_logical_row_fields, metrics, { row_idx = next_row_idx })
+    if not next_row_idx_valid then
       return row_idx
     end
 
-    local next_row = metrics:row({ row_idx = next_row_idx })
-    if #next_row.fields >= col_idx then
+    if #ranges >= col_idx then
       return next_row_idx
     end
   end
@@ -155,10 +137,12 @@ local function get_jump_destination(bufnr, metrics, opts)
       local direction = (row_delta > 0) and 1 or -1
       row_idx = move_to_next_row(metrics, row_idx, col_idx, direction)
     end
+    print("row_idx: " .. row_idx .. ", col_idx: " .. col_idx .. ", col_delta: " .. col_delta)
 
     -- Calculate column
     if opts.col_wrap then
       row_idx, col_idx = wrap_column(metrics, row_idx, col_idx, col_delta)
+      print("row_idx: " .. row_idx .. ", col_idx: " .. col_idx .. ", col_delta: " .. col_delta)
     else
       col_idx = col_idx + col_delta
     end
@@ -264,11 +248,8 @@ function M.field(bufnr, opts)
   local metrics = view.metrics
   local row_idx, col_idx = get_jump_destination(bufnr, metrics, opts)
 
-  -- Clamp row and column indices
-  row_idx = clamp(row_idx, 1, metrics:row_count())
-
-  local row = metrics:row({ row_idx = row_idx })
-  local field_count = #row.fields
+  local fields = metrics:get_logical_row_fields({ row_idx = row_idx })
+  local field_count = #fields
   col_idx = clamp(col_idx, 1, field_count)
 
   -- If the line is empty or comment, set the cursor to the beginning of the line
@@ -278,14 +259,17 @@ function M.field(bufnr, opts)
   end
 
   -- Update cursor position
-  local field = row.fields[col_idx]
+  local field = fields[col_idx]
   local anchored_col --- @type integer
+  local anchored_lnum --- @type integer
   if opts.anchor == "start" then
-    anchored_col = field.offset
+    anchored_lnum = field.start_row
+    anchored_col = field.start_col
   else
-    anchored_col = field.offset + math.max(0, field.len - 1)
+    anchored_lnum = field.end_row
+    anchored_col = field.end_col
   end
-  vim.api.nvim_win_set_cursor(winid, { row_idx, anchored_col })
+  vim.api.nvim_win_set_cursor(winid, { anchored_lnum, anchored_col })
 end
 
 --- Moves the cursor to the next end of the field

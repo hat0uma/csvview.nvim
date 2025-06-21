@@ -249,7 +249,7 @@ function CsvViewParser:_parse_line(lnum)
   end
 
   -- Add the last field to the list
-  if pos > 1 then
+  if pos > 1 or field_start.lnum ~= current_lnum then
     add_field(pos - 1)
   end
 

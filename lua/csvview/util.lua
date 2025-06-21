@@ -72,19 +72,20 @@ function M.get_cursor(bufnr)
   elseif lnum == range.start_row and col_byte == range.start_col then
     anchor = "start"
   elseif lnum == range.end_row then
+    local last_line = lines[#lines]
     local offset_in_field = lnum == range.start_row and col_byte - range.start_col or col_byte
     -- Use `vim.fn.charidx()` to handle multibyte safety in indexing.
-    local charlen = vim.fn.charidx(lines[#lines], #lines[#lines])
-    local charidx = vim.fn.charidx(lines[#lines], offset_in_field)
+    local charlen = vim.fn.charidx(last_line, #last_line)
+    local charidx = vim.fn.charidx(last_line, offset_in_field)
     anchor = charidx == charlen - 1 and "end" or "inside"
   else
     anchor = "inside"
   end
 
+  local logical_row_number = view.metrics:get_logical_row_idx(lnum)
   return { --- @type CsvView.Cursor
     kind = "field",
-    -- TODO: use logical row instead of lnum for multiline fields
-    pos = { lnum, col_idx },
+    pos = { logical_row_number, col_idx },
     anchor = anchor,
     text = text,
   }

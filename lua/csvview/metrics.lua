@@ -174,7 +174,26 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   self._current_parse = { cancelled = false }
 
   -- Get the range of logical CSV rows for the changed lines
-  local start_reparse, end_reparse = self:get_logical_row_line_range(first + 1)
+  -- TODO: refactor
+  local start_reparse, end_reparse --- @type integer, integer
+  if (first + 1) < #self._rows then
+    local field_start_lnum, field_end_lnum = self:get_logical_row_range(first + 1)
+    start_reparse = field_start_lnum
+    end_reparse = math.max(field_end_lnum, last)
+  else
+    -- if adding a new row after the last row
+    local last_row = self:row({ lnum = first })
+    if last_row.type == "multiline_continuation" and not last_row.terminated then
+      start_reparse = first - last_row.start_loffset
+      end_reparse = last
+    else
+      -- Otherwise, we can just reparse the last row
+      start_reparse = first + 1
+      end_reparse = last
+    end
+  end
+  -- Ensure the range is within bounds
+  end_reparse = math.min(end_reparse, vim.api.nvim_buf_line_count(self._bufnr))
 
   ---@type table<integer,boolean>
   local recalculate_columns = {}
@@ -189,14 +208,13 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   end
 
   -- update metrics
-  self:_compute_metrics(start_reparse, math.max(end_reparse, last), recalculate_columns, on_end)
+  self:_compute_metrics(start_reparse, end_reparse, recalculate_columns, on_end)
 end
 
 --- Get row metrics by line number
 ---@param lnum integer 1-indexed line number
 ---@return CsvView.Metrics.Row
 function CsvViewMetrics:_get_row_by_lnum(lnum)
-  -- TODO: This function needs to be modified if considering multi-line fields.
   if not self._rows[lnum] then
     error(string.format("Row out of bounds lnum=%d", lnum))
   end
@@ -207,10 +225,21 @@ end
 ---@param row_idx integer 1-indexed CSV row index
 ---@return CsvView.Metrics.Row
 function CsvViewMetrics:_get_row_by_row_idx(row_idx)
-  if not self._rows[row_idx] then
-    error(string.format("Row out of bounds row_idx=%d", row_idx))
+  local logical_row_count = 0
+
+  for i = 1, #self._rows do
+    local row = self._rows[i]
+
+    -- Count only the start of logical rows
+    if row.type == "singleline" or row.type == "multiline_start" then
+      logical_row_count = logical_row_count + 1
+      if logical_row_count == row_idx then
+        return row
+      end
+    end
   end
-  return self._rows[row_idx]
+
+  error(string.format("Row out of bounds row_idx=%d", row_idx))
 end
 
 --- Compute row metrics
@@ -490,8 +519,12 @@ end
 --- Find the start of the logical row containing the given physical line number
 ---@param lnum integer physical line number
 ---@return integer logical_start_lnum, integer logical_end_lnum
-function CsvViewMetrics:get_logical_row_line_range(lnum)
+function CsvViewMetrics:get_logical_row_range(lnum)
   local row = self._rows[lnum]
+  if not row then
+    error(string.format("Row out of bounds lnum=%d", lnum))
+  end
+
   if row.type == "multiline_continuation" then
     local start_lnum = lnum - row.start_loffset
     local endlnum = start_lnum + self._rows[start_lnum].end_loffset
@@ -503,12 +536,59 @@ function CsvViewMetrics:get_logical_row_line_range(lnum)
   end
 end
 
+--- Get logical row number from physical line number
+---@param physical_lnum integer Physical line number (1-based)
+---@return integer? logical_row_num Logical row number (1-based)
+function CsvViewMetrics:get_logical_row_idx(physical_lnum)
+  local logical_row_num = 0
+
+  for i = 1, physical_lnum do
+    local row = self._rows[i]
+    if not row then
+      return nil -- Out of bounds
+    end
+
+    -- Count only the start of logical rows
+    if row.type == "singleline" or row.type == "multiline_start" or row.type == "comment" then
+      logical_row_num = logical_row_num + 1
+    end
+  end
+
+  return logical_row_num
+end
+
+--- Get the physical line number for a logical row number
+---@param logical_row_num integer Logical row number (1-based)
+---@return integer? physical_lnum Physical line number (1-based)
+function CsvViewMetrics:get_physical_line_number(logical_row_num)
+  local logical_count = 0
+
+  for i = 1, #self._rows do
+    local row = self._rows[i]
+
+    -- Count only the start of logical rows
+    if row.type == "singleline" or row.type == "multiline_start" or row.type == "comment" then
+      logical_count = logical_count + 1
+      if logical_count == logical_row_num then
+        return i
+      end
+    end
+  end
+
+  return nil -- Not found
+end
+
 --- @alias CsvView.Metrics.LogicalFieldRange { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
 
 --- Get field ranges for a logical row containing the given physical line number.
----@param lnum integer Line number (1-based)
+---@param opts { lnum?: integer, row_idx?:integer } specify either `lnum` or `row_idx`
 ---@return CsvView.Metrics.LogicalFieldRange[] ranges List of logical field ranges for the row
-function CsvViewMetrics:get_logical_row_field_ranges(lnum)
+function CsvViewMetrics:get_logical_row_fields(opts)
+  local lnum = opts.lnum or self:get_physical_line_number(opts.row_idx)
+  if not lnum then
+    error(string.format("Invalid lnum or row_idx: lnum=%s, row_idx=%s", opts.lnum, opts.row_idx))
+  end
+
   local row = self:row({ lnum = lnum })
   local ranges = {} --- @type CsvView.Metrics.LogicalFieldRange[]
 
@@ -519,32 +599,34 @@ function CsvViewMetrics:get_logical_row_field_ranges(lnum)
 
   if row.type == "singleline" then
     for _, field in row:iter() do
+      local start_col = field.offset
       local range = { --- @type CsvView.Metrics.LogicalFieldRange
         start_row = lnum,
-        start_col = field.offset,
+        start_col = start_col,
         end_row = lnum,
-        end_col = field.offset + field.len - 1,
+        end_col = math.max(field.offset + field.len, start_col),
       }
       table.insert(ranges, range)
     end
     return ranges
   end
 
-  local logical_start_lnum, logical_end_lnum = self:get_logical_row_line_range(lnum)
+  local logical_start_lnum, logical_end_lnum = self:get_logical_row_range(lnum)
   for i = logical_start_lnum, logical_end_lnum do
     local logical_row = self:row({ lnum = i })
     for col_idx, field in logical_row:iter() do
       if not ranges[col_idx] then
+        local start_col = field.offset
         ranges[col_idx] = { --- @type CsvView.Metrics.LogicalFieldRange
           start_row = i,
-          start_col = field.offset,
+          start_col = start_col,
           end_row = i,
-          end_col = field.offset + field.len - 1,
+          end_col = math.max(field.offset + field.len, start_col),
         }
       else
         -- Extend the end row and column if this field continues on the same logical row
         ranges[col_idx].end_row = i
-        ranges[col_idx].end_col = field.offset + field.len - 1
+        ranges[col_idx].end_col = math.max(field.offset + field.len - 1, ranges[col_idx].start_col)
       end
     end
   end
@@ -559,7 +641,7 @@ end
 ---@return CsvView.Metrics.LogicalFieldRange range Logical field range for the given line and offset
 function CsvViewMetrics:get_logical_field_by_offet(lnum, offset)
   -- Convert the byte position to a column index
-  local ranges = self:get_logical_row_field_ranges(lnum)
+  local ranges = self:get_logical_row_fields({ lnum = lnum })
   local col_idx ---@type integer
   for i = 2, #ranges do
     if lnum < ranges[i].start_row then
@@ -589,6 +671,10 @@ end
 local function iter(row)
   local i = 0
   return function()
+    if not row._fields then
+      return nil, nil
+    end
+
     i = i + 1
     if i > #row._fields then
       return nil, nil
