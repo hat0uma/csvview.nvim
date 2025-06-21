@@ -626,7 +626,7 @@ function CsvViewMetrics:get_logical_row_fields(opts)
       else
         -- Extend the end row and column if this field continues on the same logical row
         ranges[col_idx].end_row = i
-        ranges[col_idx].end_col = math.max(field.offset + field.len - 1, ranges[col_idx].start_col)
+        ranges[col_idx].end_col = math.max(field.offset + field.len, ranges[col_idx].start_col)
       end
     end
   end
