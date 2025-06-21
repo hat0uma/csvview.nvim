@@ -182,8 +182,8 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
     end_reparse = math.max(field_end_lnum, last)
   else
     -- if adding a new row after the last row
-    local last_row = self:row({ lnum = first })
-    if last_row.type == "multiline_continuation" and not last_row.terminated then
+    local last_row = self._rows[first]
+    if last_row and last_row.type == "multiline_continuation" and not last_row.terminated then
       start_reparse = first - last_row.start_loffset
       end_reparse = last
     else
@@ -642,6 +642,10 @@ end
 function CsvViewMetrics:get_logical_field_by_offet(lnum, offset)
   -- Convert the byte position to a column index
   local ranges = self:get_logical_row_fields({ lnum = lnum })
+  if #ranges == 0 then
+    error(string.format("No fields found for lnum=%d", lnum))
+  end
+
   local col_idx ---@type integer
   for i = 2, #ranges do
     if lnum < ranges[i].start_row then

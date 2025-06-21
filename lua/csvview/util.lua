@@ -59,7 +59,7 @@ function M.get_cursor(bufnr)
     range.start_row - 1, -- Convert to 0-based index
     range.start_col,
     range.end_row - 1, -- Convert to 0-based index
-    range.end_col + 1,
+    range.end_col,
     {}
   )
   local text = table.concat(lines, "\n") -- Join lines if multiline
@@ -67,7 +67,7 @@ function M.get_cursor(bufnr)
   -- Determine the anchor state of the cursor within this field
   ---@type CsvView.CursorAnchor
   local anchor
-  if lnum == range.end_row and col_byte > range.end_col then
+  if lnum == range.end_row and col_byte >= range.end_col then
     anchor = "delimiter"
   elseif lnum == range.start_row and col_byte == range.start_col then
     anchor = "start"

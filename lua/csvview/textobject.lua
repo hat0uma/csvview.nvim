@@ -31,6 +31,12 @@ function M.field(bufnr, opts)
   -- Get the (line, column) position of the cursor in the window
   local lnum, col_byte = unpack(vim.api.nvim_win_get_cursor(winid))
 
+  local row = view.metrics:row({ lnum = lnum })
+  if not row or row.type == "comment" or row:field_count() == 0 then
+    -- no selection if the row is a comment or empty
+    return
+  end
+
   local col_idx, field = view.metrics:get_logical_field_by_offet(lnum, col_byte)
   local fields = view.metrics:get_logical_row_fields({ lnum = lnum })
 
