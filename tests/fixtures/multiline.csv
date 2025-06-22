@@ -1,0 +1,18 @@
+# This is a CSV file with multiline fields
+ID,Name,Address,Notes
+1,"John Doe","123 Main St
+Apt 4B
+New York, NY 10001","Customer since 2020
+Prefers email contact
+Has special delivery instructions:
+- Ring doorbell twice
+- Leave package at door"
+2,"Jane Smith","456 Oak Ave
+Unit 2
+Los Angeles, CA 90210","VIP customer
+Priority shipping
+Contact: jane@example.com
+Notes:
+- Allergic to latex
+- Prefers eco-friendly packaging"
+# end of file
