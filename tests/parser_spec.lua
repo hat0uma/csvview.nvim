@@ -323,6 +323,158 @@ local cases = {
       },
     },
   },
+  {
+    it = "should parse multi-line quoted fields with empty lines",
+    lines = {
+      "header1,header2",
+      'value1,"multi',
+      "",
+    },
+    max_lookahead = 20,
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "header1" },
+          { start_pos = 9, text = "header2" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "value1" },
+          { start_pos = 8, text = { '"multi', "" } },
+        },
+      },
+    },
+  },
+  {
+    it = "should handle multiline fields with embedded empty lines",
+    lines = {
+      "Name,Bio",
+      'John,"Engineer',
+      "",
+      "at TechCorp",
+      "",
+      'Working on AI projects"',
+    },
+    max_lookahead = 20,
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "Name" },
+          { start_pos = 6, text = "Bio" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "John" },
+          { start_pos = 6, text = { '"Engineer', "", "at TechCorp", "", 'Working on AI projects"' } },
+        },
+      },
+    },
+  },
+  {
+    it = "should parse multiline fields with various quote patterns",
+    lines = {
+      "Name,Description",
+      '"Alice","Multi-line description',
+      'with ""embedded quotes""',
+      'and regular text"',
+      '"Bob","Simple text"',
+    },
+    max_lookahead = 20,
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "Name" },
+          { start_pos = 6, text = "Description" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = '"Alice"' },
+          { start_pos = 9, text = { '"Multi-line description', 'with ""embedded quotes""', 'and regular text"' } },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = '"Bob"' },
+          { start_pos = 7, text = '"Simple text"' },
+        },
+      },
+    },
+  },
+  {
+    it = "should handle incomplete multiline fields at end of buffer",
+    lines = {
+      "Name,Description",
+      'John,"This is an incomplete',
+      "multiline field without closing quote",
+    },
+    max_lookahead = 20,
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "Name" },
+          { start_pos = 6, text = "Description" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "John" },
+          { start_pos = 6, text = { '"This is an incomplete', "multiline field without closing quote" } },
+        },
+      },
+    },
+  },
+  {
+    it = "should handle incomplete multiline fields that reaches max_lookahead",
+    lines = {
+      "Name,Description",
+      'John,"This is an incomplete',
+      "multiline field without closing quote",
+      "and more text that exceeds the lookahead limit",
+      '"',
+    },
+    max_lookahead = 2,
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "Name" },
+          { start_pos = 6, text = "Description" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "John" },
+          {
+            start_pos = 6,
+            text = {
+              '"This is an incomplete',
+              "multiline field without closing quote",
+              "and more text that exceeds the lookahead limit",
+            },
+          },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = '"' },
+        },
+      },
+    },
+  },
 }
 
 describe("CsvViewParser", function()

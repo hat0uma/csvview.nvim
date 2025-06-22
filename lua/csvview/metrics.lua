@@ -117,7 +117,7 @@ end
 
 --- Get row metrics
 ---@param opts CsvView.Metrics.RowGetOpts
----@return CsvView.Metrics.Row
+---@return CsvView.Metrics.Row?
 function CsvViewMetrics:row(opts)
   assert(opts, "opts is required")
   assert(opts.lnum or opts.row_idx, "opts.lnum or opts.row_idx is required")
@@ -173,27 +173,8 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   end
   self._current_parse = { cancelled = false }
 
-  -- Get the range of logical CSV rows for the changed lines
-  -- TODO: refactor
-  local start_reparse, end_reparse --- @type integer, integer
-  if (first + 1) < #self._rows then
-    local field_start_lnum, field_end_lnum = self:get_logical_row_range(first + 1)
-    start_reparse = field_start_lnum
-    end_reparse = math.max(field_end_lnum, last)
-  else
-    -- if adding a new row after the last row
-    local last_row = self._rows[first]
-    if last_row and last_row.type == "multiline_continuation" and not last_row.terminated then
-      start_reparse = first - last_row.start_loffset
-      end_reparse = last
-    else
-      -- Otherwise, we can just reparse the last row
-      start_reparse = first + 1
-      end_reparse = last
-    end
-  end
-  -- Ensure the range is within bounds
-  end_reparse = math.min(end_reparse, vim.api.nvim_buf_line_count(self._bufnr))
+  -- Get the range of affected lines
+  local start_reparse, end_reparse = self:_calculate_reparse_range(first, prev_last, last)
 
   ---@type table<integer,boolean>
   local recalculate_columns = {}
@@ -211,19 +192,53 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   self:_compute_metrics(start_reparse, end_reparse, recalculate_columns, on_end)
 end
 
+--- Calculate the range of logical CSV rows for the changed lines
+---@param first integer first line number
+---@param prev_last integer previous last line
+---@param last integer current last line
+---@return integer start_reparse start line number of the range to reparse
+---@return integer end_reparse end line number of the range to reparse
+function CsvViewMetrics:_calculate_reparse_range(first, prev_last, last)
+  -- Calculate the range of logical CSV rows for the changed lines
+  local start_reparse, end_reparse --- @type integer, integer
+  if (first + 1) <= #self._rows then
+    -- if adding a new row before the last row
+    local field_start_lnum, field_end_lnum = self:get_logical_row_range(first + 1)
+    start_reparse = field_start_lnum
+    end_reparse = math.max(field_end_lnum, last)
+  elseif first ~= 0 and first <= #self._rows then
+    -- if adding a new row at the end of the last row
+    local field_start_lnum, field_end_lnum = self:get_logical_row_range(first)
+    start_reparse = field_start_lnum
+    end_reparse = math.max(field_end_lnum, last)
+  else
+    start_reparse = first
+    end_reparse = last
+  end
+
+  -- Extend the range to include the affected lines
+  local row_delta = last - prev_last
+  if row_delta > 0 then
+    -- If rows were added, extend the end of the reparse range
+    end_reparse = end_reparse + row_delta
+  end
+
+  -- Ensure the range is within bounds
+  end_reparse = math.min(end_reparse + row_delta, vim.api.nvim_buf_line_count(self._bufnr))
+
+  return start_reparse, end_reparse
+end
+
 --- Get row metrics by line number
 ---@param lnum integer 1-indexed line number
----@return CsvView.Metrics.Row
+---@return CsvView.Metrics.Row?
 function CsvViewMetrics:_get_row_by_lnum(lnum)
-  if not self._rows[lnum] then
-    error(string.format("Row out of bounds lnum=%d", lnum))
-  end
   return self._rows[lnum]
 end
 
 --- Get row metrics by CSV row index
 ---@param row_idx integer 1-indexed CSV row index
----@return CsvView.Metrics.Row
+---@return CsvView.Metrics.Row?
 function CsvViewMetrics:_get_row_by_row_idx(row_idx)
   local logical_row_count = 0
 
@@ -239,7 +254,7 @@ function CsvViewMetrics:_get_row_by_row_idx(row_idx)
     end
   end
 
-  error(string.format("Row out of bounds row_idx=%d", row_idx))
+  return nil -- Row not found
 end
 
 --- Compute row metrics
@@ -590,6 +605,9 @@ function CsvViewMetrics:get_logical_row_fields(opts)
   end
 
   local row = self:row({ lnum = lnum })
+  if not row then
+    error(string.format("Row not found for lnum=%d", lnum))
+  end
   local ranges = {} --- @type CsvView.Metrics.LogicalFieldRange[]
 
   -- Handle comment or empty rows
@@ -611,9 +629,10 @@ function CsvViewMetrics:get_logical_row_fields(opts)
     return ranges
   end
 
+  -- Handle multi-line rows
   local logical_start_lnum, logical_end_lnum = self:get_logical_row_range(lnum)
   for i = logical_start_lnum, logical_end_lnum do
-    local logical_row = self:row({ lnum = i })
+    local logical_row = assert(self:row({ lnum = i }))
     for col_idx, field in logical_row:iter() do
       if not ranges[col_idx] then
         local start_col = field.offset

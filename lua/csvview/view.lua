@@ -2,6 +2,8 @@ local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 local buf = require("csvview.buf")
 local errors = require("csvview.errors")
 
+local BORDER_CHAR = "│"
+
 --- Set local option for window
 ---@param winid integer
 ---@param key string
@@ -158,7 +160,7 @@ function View:_render_delimiter(lnum, field, next_field)
     self:_add_extmark(lnum, offset, {
       hl_group = "CsvViewDelimiter",
       end_col = end_col,
-      conceal = "│",
+      conceal = BORDER_CHAR,
     })
   else
     self:_add_extmark(lnum, offset, {
@@ -281,9 +283,10 @@ function View:_field_terminated(lnum, column_index)
     return true
   end
 
-  local end_row = self.metrics:row({ lnum = lnum + row.end_loffset })
+  local end_row = assert(self.metrics:row({ lnum = lnum + row.end_loffset }))
+  assert(end_row.type == "multiline_continuation")
   local last_field_index = end_row.skipped_ncol + end_row:field_count()
-  return column_index == last_field_index
+  return column_index ~= last_field_index
 end
 
 --- Calculate padding for multiline row
@@ -304,8 +307,20 @@ function View:_calculate_padding_for_multiline(lnum, row)
     local range = ranges[i]
     local next_range = ranges[i + 1]
     if range and next_range then
-      local delimiter_len = next_range.start_col - range.end_col - 1
-      padding = padding + delimiter_len
+      if self.opts.view.display_mode == "border" then
+        padding = padding + vim.fn.strdisplaywidth(BORDER_CHAR)
+      else
+        local delimiter_text = vim.api.nvim_buf_get_text(
+          self.bufnr,
+          range.end_row - 1,
+          range.end_col,
+          next_range.start_row - 1,
+          next_range.start_col,
+          {}
+        )[1]
+        local delimiter_width = vim.fn.strdisplaywidth(delimiter_text)
+        padding = padding + delimiter_width
+      end
     end
   end
 
