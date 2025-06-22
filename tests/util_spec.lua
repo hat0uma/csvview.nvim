@@ -187,4 +187,87 @@ end
 describe("util", function()
   run(create_test(","))
   run(create_test("|||||"))
+
+  describe("get_cursor (multi-line)", function()
+    ---@type CsvView.Options
+    local opts = {
+      parser = {
+        delimiter = ",",
+        quote_char = '"',
+        comments = { "#" },
+      },
+      view = {},
+    }
+
+    ---@type { name:string, cursor:integer[],expected:CsvView.Cursor}[] }[]
+    local multiline_cases = {
+      {
+        name = "cursor at start of multi-line field",
+        cursor = { 3, 13 }, -- Start of address field
+        expected = {
+          kind = "field",
+          pos = { 3, 3 },
+          anchor = "start",
+          text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+        },
+      },
+      {
+        name = "cursor in middle of multi-line field",
+        cursor = { 4, 5 }, -- Middle of address field
+        expected = {
+          kind = "field",
+          pos = { 3, 3 },
+          anchor = "inside",
+          text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+        },
+      },
+      {
+        name = "cursor at end of multi-line field",
+        cursor = { 5, 18 }, -- End of address field
+        expected = {
+          kind = "field",
+          pos = { 3, 3 },
+          anchor = "end",
+          text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+        },
+      },
+      {
+        name = "cursor at delimiter after multi-line field",
+        cursor = { 5, 19 }, -- Delimiter after address field
+        expected = {
+          kind = "field",
+          pos = { 3, 3 },
+          anchor = "delimiter",
+          text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+        },
+      },
+    }
+
+    --- Run multi-line cursor test cases
+    ---@param cases { name:string, cursor:integer[],expected:CsvView.Cursor}[] }[]
+    local function run_multiline_tests(cases)
+      csvview.setup(opts)
+
+      for _, case in ipairs(cases) do
+        it(case.name, function()
+          local lines = testutil.readlines("tests/fixtures/multiline.csv")
+          local bufnr = vim.api.nvim_create_buf(false, true)
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+          local winid = vim.api.nvim_get_current_win()
+          vim.api.nvim_win_set_buf(winid, bufnr)
+
+          local co = coroutine.running()
+          csvview.enable(bufnr, opts)
+          testutil.yield_next_loop(co)
+
+          vim.api.nvim_win_set_cursor(0, case.cursor)
+          local cursor = util.get_cursor(bufnr)
+          assert.are.same(case.expected, cursor)
+        end)
+      end
+    end
+
+    run_multiline_tests(multiline_cases)
+  end)
 end)
