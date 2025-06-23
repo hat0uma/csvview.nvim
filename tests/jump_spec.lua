@@ -348,31 +348,20 @@ local multiline_jump_cases = {
   },
   {
     name = "when jumping beyond the last field, limit the range",
-    cursor = { row = #multiline_lines - 1, col = 0 }, -- Last field
+    cursor = { row = #multiline_lines, col = 0 }, -- Last field
     opts = { pos = { 0, 1 }, mode = "relative", col_wrap = true },
     expected_csv_cursor = {
-      kind = "field",
-      pos = { 4, 4 },
-      anchor = "start",
-      text = table.concat({
-        '"VIP customer',
-        "Priority shipping",
-        "Contact: jane@example.com",
-        "Notes:",
-        "- Allergic to latex",
-        '- Prefers eco-friendly packaging"',
-      }, "\n"),
+      kind = "comment",
+      pos = { 5 },
     },
   },
   {
     name = "when jumping beyond the first field, limit the range",
-    cursor = { row = 2, col = 0 }, -- First field
+    cursor = { row = 1, col = 0 }, -- First field
     opts = { pos = { 0, -1 }, mode = "relative", col_wrap = true },
     expected_csv_cursor = {
-      kind = "field",
-      pos = { 2, 1 },
-      anchor = "start",
-      text = "ID",
+      kind = "comment",
+      pos = { 1 },
     },
   },
 }

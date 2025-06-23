@@ -84,7 +84,7 @@ function M.readlines(filename)
   end
 
   vim.uv.fs_close(f)
-  return vim.split(text, "\n", { plain = true })
+  return vim.split(vim.trim(text), "\n", { plain = true })
 end
 
 return M

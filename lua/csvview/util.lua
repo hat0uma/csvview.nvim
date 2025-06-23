@@ -38,19 +38,20 @@ function M.get_cursor(bufnr)
 
   -- Get the (line, column) position of the cursor in the window
   local lnum, col_byte = unpack(vim.api.nvim_win_get_cursor(winid))
+  local logical_row_number = view.metrics:get_logical_row_idx(lnum)
   local row = view.metrics:row({ lnum = lnum })
-  if not row then
+  if not row or not logical_row_number then
     error("Cursor is out of bounds.")
   end
 
   -- If this line is marked as a comment, return a CommentCursor
   if row.type == "comment" then
-    return { kind = "comment", pos = { lnum } }
+    return { kind = "comment", pos = { logical_row_number } }
   end
 
   -- Empty line
   if row:field_count() == 0 then
-    return { kind = "empty_line", pos = { lnum } }
+    return { kind = "empty_line", pos = { logical_row_number } }
   end
 
   local col_idx, range = view.metrics:get_logical_field_by_offet(lnum, col_byte)
@@ -82,7 +83,6 @@ function M.get_cursor(bufnr)
     anchor = "inside"
   end
 
-  local logical_row_number = view.metrics:get_logical_row_idx(lnum)
   return { --- @type CsvView.Cursor
     kind = "field",
     pos = { logical_row_number, col_idx },
