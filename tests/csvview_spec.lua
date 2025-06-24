@@ -42,8 +42,7 @@ describe("csvview", function()
   ---@param tests { describe: string, cases: CsvView.Tests.UpdateCase[] }[]
   local function run_update_tests(tests)
     describe("when updating the buffer", function()
-      config.setup({ parser = { comments = { "#" } } })
-      csvview.setup()
+      csvview.setup({ parser = { comments = { "#" } } })
       local ns = vim.api.nvim_get_namespaces()["csv_extmark"]
 
       for _, section in ipairs(tests) do

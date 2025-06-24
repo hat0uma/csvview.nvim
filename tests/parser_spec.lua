@@ -10,7 +10,6 @@ local config = require("csvview.config")
 ---  lines: string[],
 ---  startlnum: integer?,
 ---  endlnum: integer?,
----  max_lookahead?: integer,
 ---  expected: {
 ---    is_comment: boolean?,
 ---    fields: CsvView.Parser.FieldInfo[],
@@ -444,7 +443,7 @@ local cases = {
       "and more text that exceeds the lookahead limit",
       '"',
     },
-    max_lookahead = 2,
+    opts = { parser = { max_lookahead = 2 } },
     expected = {
       {
         is_comment = false,
@@ -485,7 +484,6 @@ describe("CsvViewParser", function()
       local opts = config.get(case.opts)
       local bufnr = vim.api.nvim_create_buf(false, true)
       local parser = CsvViewParser:new(bufnr, opts)
-      parser._max_lookahead = case.max_lookahead or 0
 
       vim.api.nvim_buf_set_lines(bufnr, 0, #case.lines, false, case.lines)
 

@@ -89,7 +89,6 @@ end
 ---@field private _opts CsvView.InternalOptions Options for parsing.
 ---@field private _quote_char integer Quote character byte.
 ---@field private _delimiter CsvView.Parser.DelimiterPolicy Delimiter policy.
----@field _max_lookahead integer Maximum lookahead for multi-line fields.
 local CsvViewParser = {}
 
 --- Create a new CsvView.Parser.
@@ -102,10 +101,6 @@ function CsvViewParser:new(bufnr, opts)
   obj._opts = opts
   obj._quote_char = quote_char_byte(bufnr, opts)
   obj._delimiter = resolve_delimiter(opts, bufnr)
-
-  -- NOTE: If this is set to 1 or more, multi-line fields will be parsed.
-  -- However, since other modules do not expect multi-line fields, set it to 0 for now.
-  obj._max_lookahead = 50
 
   setmetatable(obj, self)
   self.__index = self
@@ -181,7 +176,7 @@ function CsvViewParser:_parse_line(lnum)
         return true
       end
 
-      if current_lnum >= math.min(lnum + self._max_lookahead, line_count) then
+      if current_lnum >= math.min(lnum + self._opts.parser.max_lookahead, line_count) then
         -- Reached the lookahead limit without finding the closing quote
         terminated = false
         return false

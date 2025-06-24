@@ -134,6 +134,13 @@ lua require('csvview').setup()
       -- "--",
       -- "//",
     },
+
+    --- Maximum lookahead for multi-line fields
+    --- This limits how many lines ahead the parser will look when trying to find 
+    --- the closing quote of a multi-line field. Setting this too high may cause
+    --- performance issues when editing files with unmatched quotes.
+    --- @type integer
+    max_lookahead = 50,
   },
   view = {
     --- minimum width of a column
