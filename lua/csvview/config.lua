@@ -5,6 +5,7 @@ local M = {}
 ---@field delimiter? CsvView.Options.Parser.Delimiter
 ---@field quote_char? string
 ---@field comments? string[]
+---@field max_lookahead? integer
 ---@alias CsvView.Options.Parser.Delimiter string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
 
 ---@class CsvView.Options.View
@@ -90,6 +91,13 @@ M.defaults = {
       -- "--",
       -- "//",
     },
+
+    --- Maximum lookahead for multi-line fields
+    --- This limits how many lines ahead the parser will look when trying to find
+    --- the closing quote of a multi-line field. Setting this too high may cause
+    --- performance issues when editing files with unmatched quotes.
+    --- @type integer
+    max_lookahead = 50,
   },
   view = {
     --- minimum width of a column

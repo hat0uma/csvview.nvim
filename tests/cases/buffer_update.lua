@@ -2,6 +2,7 @@
 ---@field name string
 ---@field lines string[]
 ---@field changes CsvView.Tests.UpdateCase.Change[]
+---@field opts? CsvView.Options
 ---@field expected string[]
 
 ---@class CsvView.Tests.UpdateCase.Change
@@ -10,7 +11,7 @@
 ---@field after string?
 
 --- Test cases for csvview when updating the buffer.
----@type { describe:string, cases: CsvView.Tests.UpdateCase[] }
+---@type { describe:string, cases: CsvView.Tests.UpdateCase[] }[]
 return {
   -----------------------------------------------------------
   -- Line Modify

@@ -2,17 +2,12 @@
 local config = require("csvview.config")
 local csvview = require("csvview")
 local jump = require("csvview.jump")
+local testutil = require("tests.testutil")
 
 ---@type CsvView.Options
 local opts = { parser = { comments = { "#" } } }
 
-local lines = {
-  "Index,ID,Name,Email,Birthday",
-  "1,XUMMW7737A,Jane Davis,jane.williams@example.org,1964-03-22",
-  "# this is a comment",
-  "",
-  "last line",
-}
+local lines = testutil.readlines("tests/fixtures/minimal.csv")
 
 ---@class CsvView.MotionCase
 ---@field name string
@@ -279,6 +274,191 @@ local helpers_case = {
   },
 }
 
+local multiline_lines = testutil.readlines("tests/fixtures/multiline.csv")
+
+---@type CsvView.MotionCase[]
+local multiline_jump_cases = {
+  {
+    name = "from start of multiline field to next field",
+    cursor = { row = 3, col = 13 }, -- Start of Address field
+    opts = { pos = { 0, 1 }, mode = "relative" },
+    expected_csv_cursor = {
+      kind = "field",
+      pos = { 3, 4 },
+      anchor = "start",
+      text = '"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+    },
+  },
+  {
+    name = "from middle of multiline field to next field",
+    cursor = { row = 5, col = 5 }, -- Middle of Address field
+    opts = { pos = { 0, 1 }, mode = "relative" },
+    expected_csv_cursor = {
+      kind = "field",
+      pos = { 3, 4 },
+      anchor = "start",
+      text = '"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+    },
+  },
+  {
+    name = "from end of multiline field to next row",
+    cursor = { row = 9, col = 0 }, -- End of first record
+    opts = { pos = { 1, 0 }, mode = "relative" },
+    expected_csv_cursor = {
+      kind = "field",
+      pos = { 4, 4 },
+      anchor = "start",
+      text = table.concat({
+        '"VIP customer',
+        "Priority shipping",
+        "Contact: jane@example.com",
+        "Notes:",
+        "- Allergic to latex",
+        '- Prefers eco-friendly packaging"',
+      }, "\n"),
+    },
+  },
+  {
+    name = "to absolute position in multiline context",
+    cursor = { row = 2, col = 0 },
+    opts = { pos = { 3, 3 }, mode = "absolute" },
+    expected_csv_cursor = {
+      kind = "field",
+      pos = { 3, 3 },
+      anchor = "start",
+      text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+    },
+  },
+  {
+    name = "navigate between multiline fields with wrapping",
+    cursor = { row = 9, col = 0 }, -- End of Notes field
+    opts = { pos = { 0, 1 }, mode = "relative", col_wrap = true },
+    expected_csv_cursor = { kind = "field", pos = { 4, 1 }, anchor = "start", text = "2" },
+  },
+  {
+    name = "navigate to end of multiline field",
+    cursor = { row = 3, col = 13 }, -- Start of Address field
+    opts = { pos = { 0, 0 }, anchor = "end" },
+    expected_csv_cursor = {
+      kind = "field",
+      pos = { 3, 3 },
+      anchor = "end",
+      text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+    },
+  },
+  {
+    name = "when jumping beyond the last field, limit the range",
+    cursor = { row = #multiline_lines, col = 0 }, -- Last field
+    opts = { pos = { 0, 1 }, mode = "relative", col_wrap = true },
+    expected_csv_cursor = {
+      kind = "comment",
+      pos = { 5 },
+    },
+  },
+  {
+    name = "when jumping beyond the first field, limit the range",
+    cursor = { row = 1, col = 0 }, -- First field
+    opts = { pos = { 0, -1 }, mode = "relative", col_wrap = true },
+    expected_csv_cursor = {
+      kind = "comment",
+      pos = { 1 },
+    },
+  },
+}
+
+local multiline_helpers_case = {
+  {
+    name = "cursor is in the middle of multiline field",
+    cursor = { row = 5, col = 5 }, -- Middle of Address field
+    expected_csv_cursor = {
+      next_field_start = {
+        kind = "field",
+        pos = { 3, 4 },
+        anchor = "start",
+        text = '"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+      },
+      prev_field_start = {
+        kind = "field",
+        pos = { 3, 3 },
+        anchor = "start",
+        text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+      },
+      next_field_end = {
+        kind = "field",
+        pos = { 3, 3 },
+        anchor = "end",
+        text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+      },
+      prev_field_end = {
+        kind = "field",
+        pos = { 3, 2 },
+        anchor = "end",
+        text = '"John Doe"',
+      },
+    },
+  },
+  {
+    name = "cursor is at start of multiline field",
+    cursor = { row = 3, col = 13 }, -- Start of Address field
+    expected_csv_cursor = {
+      next_field_start = {
+        kind = "field",
+        pos = { 3, 4 },
+        anchor = "start",
+        text = '"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+      },
+      prev_field_start = {
+        kind = "field",
+        pos = { 3, 2 },
+        anchor = "start",
+        text = '"John Doe"',
+      },
+      next_field_end = {
+        kind = "field",
+        pos = { 3, 3 },
+        anchor = "end",
+        text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+      },
+      prev_field_end = {
+        kind = "field",
+        pos = { 3, 2 },
+        anchor = "end",
+        text = '"John Doe"',
+      },
+    },
+  },
+  {
+    name = "cursor is at end of multiline field",
+    cursor = { row = 9, col = 23 }, -- End of Notes field
+    expected_csv_cursor = {
+      next_field_start = {
+        kind = "field",
+        pos = { 4, 1 },
+        anchor = "start",
+        text = "2",
+      },
+      prev_field_start = {
+        kind = "field",
+        pos = { 3, 4 },
+        anchor = "start",
+        text = '"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+      },
+      next_field_end = {
+        kind = "field",
+        pos = { 4, 1 },
+        anchor = "start",
+        text = "2",
+      },
+      prev_field_end = {
+        kind = "field",
+        pos = { 3, 3 },
+        anchor = "end",
+        text = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+      },
+    },
+  },
+}
+
 describe("motion", function()
   before_each(function()
     config.setup()
@@ -290,6 +470,26 @@ describe("motion", function()
       it(case.name, function()
         local bufnr = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        vim.api.nvim_win_set_buf(0, bufnr)
+
+        csvview.enable(bufnr, opts)
+
+        -- Move cursor to the specified field
+        vim.api.nvim_win_set_cursor(0, { case.cursor.row, case.cursor.col })
+        jump.field(bufnr, case.opts)
+
+        -- Get the new cursor position
+        local csv_cursor = require("csvview.util").get_cursor(bufnr)
+        assert.are.same(case.expected_csv_cursor, csv_cursor)
+      end)
+    end
+  end)
+
+  describe("jump with multiline fields", function()
+    for _, case in ipairs(multiline_jump_cases) do
+      it(case.name, function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, multiline_lines)
         vim.api.nvim_win_set_buf(0, bufnr)
 
         csvview.enable(bufnr, opts)
@@ -330,6 +530,33 @@ describe("motion", function()
         local csv_cursor = require("csvview.util").get_cursor(bufnr)
         assert.are.same(helpers_case[i].expected_csv_cursor[func_name], csv_cursor)
       end)
+    end
+  end
+
+  for _, func_name in ipairs(func_names) do
+    for i = 1, #multiline_helpers_case do
+      it(
+        string.format(
+          "%s should jump correctly in multiline context when %s",
+          func_name,
+          multiline_helpers_case[i].name
+        ),
+        function()
+          local bufnr = vim.api.nvim_create_buf(false, true)
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, multiline_lines)
+          vim.api.nvim_win_set_buf(0, bufnr)
+
+          csvview.enable(bufnr, opts)
+
+          -- Move cursor to the specified field
+          vim.api.nvim_win_set_cursor(0, { multiline_helpers_case[i].cursor.row, multiline_helpers_case[i].cursor.col })
+
+          jump[func_name](bufnr)
+          -- Get the new cursor position
+          local csv_cursor = require("csvview.util").get_cursor(bufnr)
+          assert.are.same(multiline_helpers_case[i].expected_csv_cursor[func_name], csv_cursor)
+        end
+      )
     end
   end
 end)

@@ -105,4 +105,69 @@ describe("textobject", function()
 
   run(create_test(","))
   run(create_test("|||"))
+
+  describe("multi-line fields", function()
+    local testutil = require("tests.testutil")
+
+    ---@type CsvView.Options
+    local opts = {
+      parser = {
+        comments = { "#" },
+        delimiter = ",",
+      },
+    }
+
+    ---@type CsvView.TextObjectCase[]
+    local multiline_cases = {
+      {
+        name = "selects multi-line field without delimiter",
+        cursor = { row = 4, col = 5 }, -- in address field
+        opts = { include_delimiter = false },
+        expected = '"123 Main St\nApt 4B\nNew York, NY 10001"',
+      },
+      {
+        name = "selects multi-line field with delimiter The cursor is not last column",
+        cursor = { row = 3, col = 20 }, -- in address field
+        opts = { include_delimiter = true },
+        expected = '"123 Main St\nApt 4B\nNew York, NY 10001",',
+      },
+      {
+        name = "selects multi-line field with delimiter. The cursor is last column",
+        cursor = { row = 6, col = 5 }, -- in note field
+        opts = { include_delimiter = true },
+        expected = ',"Customer since 2020\nPrefers email contact\nHas special delivery instructions:\n- Ring doorbell twice\n- Leave package at door"',
+      },
+    }
+
+    --- Run multi-line field test cases
+    ---@param cases CsvView.TextObjectCase[]
+    local function run_multiline_tests(cases)
+      for _, case in ipairs(cases) do
+        it(case.name, function()
+          local lines = testutil.readlines("tests/fixtures/multiline.csv")
+          local bufnr = vim.api.nvim_create_buf(false, true)
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+          vim.api.nvim_win_set_buf(0, bufnr)
+
+          local co = coroutine.running()
+          csvview.enable(bufnr, opts)
+          testutil.yield_next_loop(co)
+
+          -- Move cursor to the specified field
+          vim.api.nvim_win_set_cursor(0, { case.cursor.row, case.cursor.col })
+          textobject.field(bufnr, case.opts)
+
+          -- Clear the register
+          vim.fn.setreg("0", "")
+
+          -- Copy the selected text
+          vim.cmd("normal! y")
+          local selected = vim.fn.getreg("0")
+          assert.are.same(case.expected, selected)
+        end)
+      end
+    end
+
+    run_multiline_tests(multiline_cases)
+  end)
 end)

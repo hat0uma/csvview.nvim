@@ -4,9 +4,17 @@ local errors = require("csvview.errors")
 ---@field start_pos integer 1-based start position of the fields
 ---@field text string|string[] the text of the field. if the field is a quoted field, it will be a string array.
 
+---
 ---@class Csvview.Parser.Callbacks
----@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[]) the callback to be called for each line.
----@field on_end fun(err?:string) the callback to be called when parsing is done
+---
+--- the callback to be called for each parsed line
+--- If the callback returns a new end line number, the parser will continue parsing until that line.
+---@field on_line fun(lnum:integer,is_comment:boolean,fields:CsvView.Parser.FieldInfo[], endlnum: integer, terminated:boolean): integer?
+---
+--- the callback to be called when parsing is done.
+--- If an error occurs, the `err` parameter will be a string with the error message.
+--- "cancelled" will be passed if the parsing was cancelled.
+---@field on_end fun(err?:string)
 
 ---@class CsvView.Parser.DelimiterPolicy
 ---@field match fun(s:string, pos:integer, char:integer, match_count:integer): CsvView.Parser.DelimiterPolicy.MatchState
@@ -81,7 +89,6 @@ end
 ---@field private _opts CsvView.InternalOptions Options for parsing.
 ---@field private _quote_char integer Quote character byte.
 ---@field private _delimiter CsvView.Parser.DelimiterPolicy Delimiter policy.
----@field _max_lookahead integer Maximum lookahead for multi-line fields.
 local CsvViewParser = {}
 
 --- Create a new CsvView.Parser.
@@ -94,10 +101,6 @@ function CsvViewParser:new(bufnr, opts)
   obj._opts = opts
   obj._quote_char = quote_char_byte(bufnr, opts)
   obj._delimiter = resolve_delimiter(opts, bufnr)
-
-  -- NOTE: If this is set to 1 or more, multi-line fields will be parsed.
-  -- However, since other modules do not expect multi-line fields, set it to 0 for now.
-  obj._max_lookahead = 0
 
   setmetatable(obj, self)
   self.__index = self
@@ -128,6 +131,7 @@ end
 ---@return boolean is_comment_line Whether the line is a comment line.
 ---@return CsvView.Parser.FieldInfo[] fields An array of field information.
 ---@return integer endlnum The end line number.
+---@return boolean terminated Whether the closing quote was found within the lookahead limit.
 function CsvViewParser:_parse_line(lnum)
   -- Assume CSV format compliant with RFC 4180
   -- - Each record is separated by a newline or delimiter.
@@ -136,21 +140,24 @@ function CsvViewParser:_parse_line(lnum)
   --
   -- Additional rules
   -- - Ignore comment lines
-  -- - Limit the search for closing quotes to a specified number of lines.
+  -- - Limit the logical line parsing to a certain number of lines ahead
   --   (Parsing is triggered by user edits, so without this limit, adding a quote would re-parse all lines.)
   local fields = {} ---@type CsvView.Parser.FieldInfo[]
+  local terminated = true
   local current_lnum = lnum
 
   -- Get initial line
   local line = self:_get_line(lnum)
   if not line then
-    return false, fields, current_lnum
+    return false, fields, current_lnum, terminated
   end
 
   -- Check if the line is a comment line
   if self:_is_comment_line(line) then
-    return true, fields, current_lnum
+    return true, fields, current_lnum, terminated
   end
+
+  local line_count = vim.api.nvim_buf_line_count(self._bufnr)
 
   local pos = 1
   local delimiter_match_count = 0
@@ -169,7 +176,9 @@ function CsvViewParser:_parse_line(lnum)
         return true
       end
 
-      if current_lnum >= (field_start.lnum + self._max_lookahead) then
+      if current_lnum >= math.min(lnum + self._opts.parser.max_lookahead, line_count) then
+        -- Reached the lookahead limit without finding the closing quote
+        terminated = false
         return false
       end
 
@@ -235,18 +244,19 @@ function CsvViewParser:_parse_line(lnum)
   end
 
   -- Add the last field to the list
-  if pos > 1 then
+  if pos > 1 or field_start.lnum ~= current_lnum then
     add_field(pos - 1)
   end
 
-  return false, fields, current_lnum
+  return false, fields, current_lnum, terminated
 end
 
 --- Parse CSV lines.
 ---@param cb Csvview.Parser.Callbacks
 ---@param startlnum? integer 1-indexed start line number.
 ---@param endlnum? integer 1-indexed end line number.
-function CsvViewParser:parse_lines(cb, startlnum, endlnum)
+---@param cancel_token? { cancelled:boolean }
+function CsvViewParser:parse_lines(cb, startlnum, endlnum, cancel_token)
   startlnum = startlnum or 1
   endlnum = endlnum or vim.api.nvim_buf_line_count(self._bufnr)
 
@@ -273,12 +283,19 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum)
 
   local current_lnum = startlnum
   iter = function()
+    if cancel_token and cancel_token.cancelled then
+      cb.on_end("cancelled")
+      return
+    end
+
     local chunk_end = math.min(current_lnum + self._opts.parser.async_chunksize - 1, endlnum)
     while current_lnum <= chunk_end do
-      local is_comment, fields
-      is_comment, fields, current_lnum = self:_parse_line(current_lnum)
-      cb.on_line(current_lnum, is_comment, fields)
-      current_lnum = current_lnum + 1
+      local is_comment, fields, parse_endlnum, closed = self:_parse_line(current_lnum)
+      local new_endlnum = cb.on_line(current_lnum, is_comment, fields, parse_endlnum, closed)
+      current_lnum = parse_endlnum + 1
+      if new_endlnum then
+        endlnum = new_endlnum
+      end
     end
 
     if current_lnum <= endlnum then

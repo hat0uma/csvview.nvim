@@ -38,43 +38,54 @@ function M.get_cursor(bufnr)
 
   -- Get the (line, column) position of the cursor in the window
   local lnum, col_byte = unpack(vim.api.nvim_win_get_cursor(winid))
+  local logical_row_number = view.metrics:get_logical_row_idx(lnum)
   local row = view.metrics:row({ lnum = lnum })
-  if not row then
+  if not row or not logical_row_number then
     error("Cursor is out of bounds.")
   end
 
   -- If this line is marked as a comment, return a CommentCursor
-  if row.is_comment then
-    return { kind = "comment", pos = { lnum } }
+  if row.type == "comment" then
+    return { kind = "comment", pos = { logical_row_number } }
   end
 
   -- Empty line
-  if #row.fields == 0 then
-    return { kind = "empty_line", pos = { lnum } }
+  if row:field_count() == 0 then
+    return { kind = "empty_line", pos = { logical_row_number } }
   end
 
-  -- Convert the byte position to a column index
-  local col_idx, field = row:get_field_by_offset(col_byte)
-  local offset_in_field = col_byte - field.offset
-  local text = vim.api.nvim_buf_get_text(bufnr, lnum - 1, field.offset, lnum - 1, field.offset + field.len, {})[1]
+  local col_idx, range = view.metrics:get_logical_field_by_offet(lnum, col_byte)
+  local lines = vim.api.nvim_buf_get_text(
+    bufnr,
+    range.start_row - 1, -- Convert to 0-based index
+    range.start_col,
+    range.end_row - 1, -- Convert to 0-based index
+    range.end_col,
+    {}
+  )
+  local text = table.concat(lines, "\n") -- Join lines if multiline
 
   -- Determine the anchor state of the cursor within this field
   ---@type CsvView.CursorAnchor
   local anchor
-  if offset_in_field >= field.len then
+  if lnum == range.end_row and col_byte >= range.end_col then
     anchor = "delimiter"
-  elseif offset_in_field == 0 then
+  elseif lnum == range.start_row and col_byte == range.start_col then
     anchor = "start"
-  else
+  elseif lnum == range.end_row then
+    local last_line = lines[#lines]
+    local offset_in_field = lnum == range.start_row and col_byte - range.start_col or col_byte
     -- Use `vim.fn.charidx()` to handle multibyte safety in indexing.
-    local charlen = vim.fn.charidx(text, field.len)
-    local charidx = vim.fn.charidx(text, offset_in_field)
+    local charlen = vim.fn.charidx(last_line, #last_line)
+    local charidx = vim.fn.charidx(last_line, offset_in_field)
     anchor = charidx == charlen - 1 and "end" or "inside"
+  else
+    anchor = "inside"
   end
 
   return { --- @type CsvView.Cursor
     kind = "field",
-    pos = { lnum, col_idx },
+    pos = { logical_row_number, col_idx },
     anchor = anchor,
     text = text,
   }

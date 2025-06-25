@@ -52,4 +52,39 @@ function M.yield_next_loop(thread)
   coroutine.yield()
 end
 
+--- Read lines from a file and return them as a table.
+---@param filename string
+---@return string[]
+function M.readlines(filename)
+  local err, err_msg ---@type string?, string?
+
+  local f
+  f, err, err_msg = vim.uv.fs_open(filename, "r", 438) -- 0666
+  if not f then
+    error(string.format("Failed to open file '%s': %s", filename, err_msg or err))
+  end
+
+  local stat
+  stat, err, err_msg = vim.uv.fs_fstat(f)
+  if not stat then
+    vim.uv.fs_close(f)
+    error(string.format("Failed to stat file '%s': %s", filename, err_msg or err))
+  end
+
+  if stat.type ~= "file" then
+    vim.uv.fs_close(f)
+    error(string.format("Expected a file, but got: %s", stat.type))
+  end
+
+  local text
+  text, err, err_msg = vim.uv.fs_read(f, stat.size)
+  if not text then
+    vim.uv.fs_close(f)
+    error(string.format("Failed to read file '%s': %s", filename, err_msg or err))
+  end
+
+  vim.uv.fs_close(f)
+  return vim.split(vim.trim(text), "\n", { plain = true })
+end
+
 return M
