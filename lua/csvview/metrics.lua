@@ -224,8 +224,7 @@ function CsvViewMetrics:_calculate_reparse_range(first, prev_last, last)
   end
 
   -- Ensure the range is within bounds
-  end_reparse = math.min(end_reparse + row_delta, vim.api.nvim_buf_line_count(self._bufnr))
-
+  end_reparse = math.min(end_reparse, vim.api.nvim_buf_line_count(self._bufnr))
   return start_reparse, end_reparse
 end
 
@@ -635,17 +634,16 @@ function CsvViewMetrics:get_logical_row_fields(opts)
     local logical_row = assert(self:row({ lnum = i }))
     for col_idx, field in logical_row:iter() do
       if not ranges[col_idx] then
-        local start_col = field.offset
         ranges[col_idx] = { --- @type CsvView.Metrics.LogicalFieldRange
           start_row = i,
-          start_col = start_col,
+          start_col = field.offset,
           end_row = i,
-          end_col = math.max(field.offset + field.len, start_col),
+          end_col = field.offset + field.len,
         }
       else
         -- Extend the end row and column if this field continues on the same logical row
         ranges[col_idx].end_row = i
-        ranges[col_idx].end_col = math.max(field.offset + field.len, ranges[col_idx].start_col)
+        ranges[col_idx].end_col = field.offset + field.len
       end
     end
   end

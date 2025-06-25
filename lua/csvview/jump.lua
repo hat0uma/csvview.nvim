@@ -285,7 +285,7 @@ function M.field(bufnr, opts)
     anchored_col = field.start_col
   else
     anchored_lnum = field.end_row
-    anchored_col = math.max(field.end_col - 1, field.start_col)
+    anchored_col = field.end_col - 1
   end
   vim.api.nvim_win_set_cursor(winid, { anchored_lnum, anchored_col })
 end

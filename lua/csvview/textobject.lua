@@ -1,6 +1,5 @@
 local M = {}
 local buf = require("csvview.buf")
-local util = require("csvview.util")
 
 --- Selects the current field.
 --- @param bufnr integer?
@@ -57,7 +56,8 @@ function M.field(bufnr, opts)
     end
   end
 
-  if start_col > end_col then
+  -- Check if the field is valid.
+  if field.start_row > field.end_row or (field.start_row == field.end_row and start_col > end_col) then
     return
   end
 
