@@ -1,4 +1,20 @@
+local ffi = require("ffi")
 local nop = function() end
+
+--- @class CsvView.Metrics.Field
+--- @field offset integer
+--- @field len integer
+--- @field display_width integer
+--- @field is_number boolean
+--- FFI struct definition for memory efficiency
+ffi.cdef([[
+  typedef struct {
+    int32_t offset;
+    int32_t len;
+    int32_t display_width;
+    bool is_number;
+  } csvview_field_t;
+]])
 
 -----------------------------------------------------------------------------
 -- Row types
@@ -66,12 +82,6 @@ local CsvViewMetrics = {}
 --- @class CsvView.Metrics.Column
 --- @field max_width integer
 --- @field max_row integer
-
---- @class CsvView.Metrics.Field
---- @field offset integer
---- @field len integer
---- @field display_width integer
---- @field is_number boolean
 
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
@@ -275,12 +285,7 @@ local function construct_rows(lnum, is_comment, parsed_fields, parsed_endlnum, t
       assert(type(field_text) == "string")
 
       local width = vim.fn.strdisplaywidth(field_text)
-      row:append({
-        offset = field.start_pos - 1,
-        len = #field.text,
-        display_width = width,
-        is_number = tonumber(field.text) ~= nil,
-      })
+      row:append(field.start_pos - 1, #field.text, width, tonumber(field.text) ~= nil)
     end
     return { row }
   end
@@ -299,7 +304,7 @@ local function construct_rows(lnum, is_comment, parsed_fields, parsed_endlnum, t
         -- first line starts at field.start_pos, others are 0
         local offset = i == 1 and field.start_pos - 1 or 0
         local width = vim.fn.strdisplaywidth(text)
-        rows[index]:append({ offset = offset, len = #text, display_width = width, is_number = false })
+        rows[index]:append(offset, #text, width, false)
 
         -- Add next row
         if i ~= #field_text then
@@ -316,12 +321,12 @@ local function construct_rows(lnum, is_comment, parsed_fields, parsed_endlnum, t
       end
     else
       -- Single-line field
-      rows[index]:append({
-        offset = field.start_pos - 1,
-        len = #field.text,
-        display_width = vim.fn.strdisplaywidth(field_text),
-        is_number = tonumber(field.text) ~= nil,
-      })
+      rows[index]:append(
+        field.start_pos - 1,
+        #field.text,
+        vim.fn.strdisplaywidth(field_text),
+        tonumber(field.text) ~= nil
+      )
     end
   end
   return rows
@@ -384,12 +389,10 @@ function CsvViewMetrics:_recalculate_column(col_idx)
 
   -- Find the maximum width in the column
   for row_idx, row in ipairs(self._rows) do
-    if row.type ~= "comment" then
-      local field = row:field(col_idx)
-      if field and field.display_width > max_width then
-        max_width = field.display_width
-        max_row = row_idx
-      end
+    local field = row:field(col_idx)
+    if field and field.display_width > max_width then
+      max_width = field.display_width
+      max_row = row_idx
     end
   end
 
@@ -709,10 +712,19 @@ local function iter(row)
   end
 end
 
---- Iterate over fields in the row
+--- Append field to the row
 ---@param row CsvView.Metrics.Row
----@param field CsvView.Metrics.Field
-local function append(row, field)
+---@param offset integer
+---@param len integer
+---@param display_width integer
+---@param is_number boolean
+local function append(row, offset, len, display_width, is_number)
+  ---@diagnostic disable-next-line: assign-type-mismatch
+  local field = ffi.new("csvview_field_t") --- @type CsvView.Metrics.Field
+  field.offset = offset
+  field.len = len
+  field.display_width = display_width
+  field.is_number = is_number
   table.insert(row._fields, field)
 end
 
