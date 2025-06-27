@@ -286,6 +286,9 @@ function M.field(bufnr, opts)
   else
     anchored_lnum = field.end_row
     anchored_col = field.end_col - 1
+    if anchored_col < 0 then
+      anchored_col = 0
+    end
   end
   vim.api.nvim_win_set_cursor(winid, { anchored_lnum, anchored_col })
 end
