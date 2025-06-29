@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/hat0uma/csvview.nvim/compare/v1.2.0...v1.3.0) (2025-06-29)
+
+
+### Features
+
+* Add support for multi-line fields ([#55](https://github.com/hat0uma/csvview.nvim/issues/55)) ([54425e4](https://github.com/hat0uma/csvview.nvim/commit/54425e47c3bc19e43ef71b7ed3e6b589306b8d48))
+
+
+### Bug Fixes
+
+* **jump:** Just field: handle case when first col is empty ([#57](https://github.com/hat0uma/csvview.nvim/issues/57)) ([6998bd0](https://github.com/hat0uma/csvview.nvim/commit/6998bd0e821ad1fb2dd199dff6a5cc1bbf71d11f))
+* **view:** Improve rendering performance ([#44](https://github.com/hat0uma/csvview.nvim/issues/44)) ([9cc5dcb](https://github.com/hat0uma/csvview.nvim/commit/9cc5dcb060c96517d8c34b74e5b81d58529b3ea2))
+
 ## [1.2.0](https://github.com/hat0uma/csvview.nvim/compare/v1.1.0...v1.2.0) (2025-03-31)
 
 
