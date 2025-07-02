@@ -1,4 +1,4 @@
-local errors = require("csvview.errors")
+local util = require("csvview.util")
 
 ---@class CsvView.Parser.FieldInfo
 ---@field start_pos integer 1-based start position of the fields
@@ -275,9 +275,9 @@ function CsvViewParser:parse_lines(cb, startlnum, endlnum, cancel_token)
 
   local iter --- @type fun():nil
   local function do_step()
-    local ok, err = xpcall(iter, errors.wrap_stacktrace)
+    local ok, err = xpcall(iter, util.wrap_stacktrace)
     if not ok then
-      cb.on_end(errors.format_error(err))
+      cb.on_end(util.format_error(err))
     end
   end
 

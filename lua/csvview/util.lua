@@ -1,8 +1,6 @@
 --- Utility functions for CSVView.
 local M = {}
 
-local buf = require("csvview.buf")
-
 ---@class CsvView.Cursor
 ---@field kind "field" | "comment" | "empty_line" Cursor kind
 ---@field pos [integer,integer?] 1-based [row, col] csv coordinates
@@ -22,7 +20,7 @@ local buf = require("csvview.buf")
 ---@param bufnr? integer Optional buffer number. Defaults to the current buffer if not provided.
 ---@return CsvView.Cursor cursor Cursor information
 function M.get_cursor(bufnr)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = M.resolve_bufnr(bufnr)
 
   -- Get the corresponding view for this buffer
   local view = require("csvview.view").get(bufnr)
@@ -31,7 +29,7 @@ function M.get_cursor(bufnr)
   end
 
   -- Find the window in which this buffer is displayed
-  local winid = buf.get_win(bufnr)
+  local winid = M.buf_get_win(bufnr)
   if not winid then
     error("Could not find window for buffer " .. bufnr)
   end
@@ -90,5 +88,169 @@ function M.get_cursor(bufnr)
     text = text,
   }
 end
+
+--- Resolve bufnr
+---@param bufnr integer| nil
+---@return integer
+function M.resolve_bufnr(bufnr)
+  if not bufnr or bufnr == 0 then
+    return vim.api.nvim_get_current_buf()
+  else
+    return bufnr
+  end
+end
+
+--- Get buffer attached window in tabpage
+---@param tabpage integer
+---@param bufnr integer
+---@return integer[]
+function M.buf_tabpage_win_find(tabpage, bufnr)
+  return vim.tbl_filter(
+    --- @param winid integer
+    --- @return boolean
+    function(winid)
+      return vim.api.nvim_win_get_buf(winid) == bufnr
+    end,
+    vim.api.nvim_tabpage_list_wins(tabpage)
+  )
+end
+
+--- Get buffer attached window
+---@param bufnr integer
+---@return integer?
+function M.buf_get_win(bufnr)
+  -- Prefer current window
+  local current_win = vim.api.nvim_get_current_win()
+  local current_buf = vim.api.nvim_win_get_buf(current_win)
+  if current_buf == bufnr then
+    return current_win
+  end
+
+  -- Find window
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+      return winid
+    end
+  end
+  return nil
+end
+
+--- Watch buffer-update events
+---@param bufnr integer
+---@param callbacks vim.api.keyset.buf_attach
+---@return fun() detach_bufevent
+function M.buf_attach(bufnr, callbacks)
+  local detached = false
+  local function wrap_buf_attach_handler(cb)
+    if not cb then
+      return nil
+    end
+
+    return function(...)
+      if detached then
+        return true -- detach
+      end
+
+      return cb(...)
+    end
+  end
+
+  local function attach_events()
+    vim.api.nvim_buf_attach(bufnr, false, {
+      on_lines = wrap_buf_attach_handler(callbacks.on_lines),
+      on_bytes = wrap_buf_attach_handler(callbacks.on_bytes),
+      on_changedtick = wrap_buf_attach_handler(callbacks.on_changedtick),
+      on_reload = wrap_buf_attach_handler(callbacks.on_reload),
+      on_detach = wrap_buf_attach_handler(callbacks.on_detach),
+      preview = true, -- for inccommand
+    })
+  end
+
+  -- Attach to buffer
+  attach_events()
+
+  -- Re-register events on `:e`
+  local buf_event_auid = vim.api.nvim_create_autocmd({ "BufReadPost" }, {
+    callback = function()
+      attach_events()
+      if callbacks.on_reload then
+        callbacks.on_reload("reload", bufnr)
+      end
+    end,
+    buffer = bufnr,
+  })
+
+  -- detach
+  return function()
+    if detached then
+      return
+    end
+
+    vim.api.nvim_del_autocmd(buf_event_auid)
+    detached = true
+  end
+end
+
+--- @class CsvView.Error
+--- @field err string error message
+--- @field stacktrace? string error stacktrace
+--- @field [string] any additional context data
+
+--- Wrap error with stacktrace for `xpcall`
+---@param err string|CsvView.Error|nil
+---@return CsvView.Error
+function M.wrap_stacktrace(err)
+  if type(err) == "table" then
+    return vim.tbl_deep_extend("keep", err, { stacktrace = debug.traceback("", 2) })
+  else
+    return { err = err, stacktrace = debug.traceback("", 2) }
+  end
+end
+
+--- Propagate error with context
+---@param err string|CsvView.Error|nil
+---@param context table<string,any>| nil
+function M.error_with_context(err, context)
+  if type(err) == "string" then
+    err = vim.tbl_deep_extend("keep", { err = err }, context or {})
+  elseif type(err) == "table" then
+    err = vim.tbl_deep_extend("keep", err, context or {})
+  end
+  error(err, 0)
+end
+
+--- Remove key from table
+---@param tbl table
+---@param key string
+---@return any
+local function tbl_remove_key(tbl, key)
+  local value = tbl[key] ---@type any
+  tbl[key] = nil ---@type any
+  return value
+end
+
+--- Format error message
+---@param err string|CsvView.Error|nil
+---@return string
+function M.format_error(err)
+  if type(err) == "table" then
+    local stacktrace = tbl_remove_key(err, "stacktrace") or "No stacktrace available"
+    local err_msg = tbl_remove_key(err, "err") or "An unspecified error occurred"
+    return string.format("Error: %s\nDetails: %s\n%s", err_msg, vim.inspect(err), stacktrace)
+  elseif type(err) == "string" then
+    return err
+  else
+    return "An unknown error occurred."
+  end
+end
+
+--- Print error message
+--- @type fun(header: string, err: string|CsvView.Error|nil)
+M.print_structured_error = vim.schedule_wrap(function(header, err)
+  local msg = M.format_error(err)
+  vim.notify(string.format("%s\n\n%s", header, msg), vim.log.levels.ERROR, {
+    title = "csvview.nvim",
+  })
+end)
 
 return M

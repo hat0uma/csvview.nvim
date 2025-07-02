@@ -1,21 +1,20 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
-local errors = require("csvview.errors")
 local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
 local CsvViewMetrics = require("csvview.metrics")
 local CsvViewParser = require("csvview.parser")
-local buf = require("csvview.buf")
 local config = require("csvview.config")
 local keymap = require("csvview.keymap")
+local util = require("csvview.util")
 
 --- check if csv table view is enabled
 ---@param bufnr integer
 ---@return boolean
 function M.is_enabled(bufnr)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   return views.get(bufnr) ~= nil
 end
 
@@ -23,7 +22,7 @@ end
 ---@param bufnr integer?
 ---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
   if M.is_enabled(bufnr) then
@@ -40,7 +39,7 @@ function M.enable(bufnr, opts)
   end)
 
   -- Register buffer-update events.
-  local detach_bufevent_handle = buf.attach(bufnr, {
+  local detach_bufevent_handle = util.buf_attach(bufnr, {
     on_lines = function(_, _, changedtick, first, last, last_updated)
       if changedtick == vim.NIL then
         -- Handle update preview with inccommand
@@ -124,7 +123,7 @@ end
 --- disable csv table view
 ---@param bufnr integer?
 function M.disable(bufnr)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   if not M.is_enabled(bufnr) then
     vim.notify("csvview: not enabled for this buffer.")
     return
@@ -137,7 +136,7 @@ end
 ---@param bufnr integer?
 ---@param opts CsvView.Options?
 function M.toggle(bufnr, opts)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   if M.is_enabled(bufnr) then
     M.disable(bufnr)
   else
@@ -169,9 +168,9 @@ function M.setup(opts)
         return false
       end
 
-      local ok, err = xpcall(view.render_lines, errors.wrap_stacktrace, view, toprow + 1, botrow + 1)
+      local ok, err = xpcall(view.render_lines, util.wrap_stacktrace, view, toprow + 1, botrow + 1)
       if not ok then
-        errors.print_structured_error("CsvView Rendering Stopped with Error", err)
+        util.print_structured_error("CsvView Rendering Stopped with Error", err)
         views.detach(view.bufnr)
       end
       return false

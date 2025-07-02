@@ -1,8 +1,7 @@
 local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
-local buf = require("csvview.buf")
-local errors = require("csvview.errors")
-
 local BORDER_CHAR = "│"
+
+local util = require("csvview.util")
 
 --- Set local option for window
 ---@param winid integer
@@ -53,9 +52,9 @@ end
 ---@param bot_lnum integer 1-indexed
 function View:render_lines(top_lnum, bot_lnum)
   for lnum = top_lnum, bot_lnum do
-    local ok, err = xpcall(self._render_line, errors.wrap_stacktrace, self, lnum)
+    local ok, err = xpcall(self._render_line, util.wrap_stacktrace, self, lnum)
     if not ok then
-      errors.error_with_context(err, { lnum = lnum })
+      util.error_with_context(err, { lnum = lnum })
     end
   end
 end
@@ -256,9 +255,9 @@ function View:_render_line(lnum)
 
   -- render fields
   for column_index, field in row:iter() do
-    local ok, err = xpcall(self._render_field, errors.wrap_stacktrace, self, lnum, column_index, field)
+    local ok, err = xpcall(self._render_field, util.wrap_stacktrace, self, lnum, column_index, field)
     if not ok then
-      errors.error_with_context(err, { lnum = lnum, column_index = column_index })
+      util.error_with_context(err, { lnum = lnum, column_index = column_index })
     end
   end
 end
@@ -340,7 +339,7 @@ M._views = {}
 ---@param bufnr integer
 ---@param view CsvView.View
 function M.attach(bufnr, view)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   if M._views[bufnr] then
     vim.notify("csvview: already attached for this buffer.")
     return
@@ -356,7 +355,7 @@ end
 --- detach view for buffer
 ---@param bufnr integer
 function M.detach(bufnr)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   if not M._views[bufnr] then
     return
   end
@@ -371,7 +370,7 @@ end
 ---@param bufnr integer
 ---@return CsvView.View?
 function M.get(bufnr)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   return M._views[bufnr]
 end
 

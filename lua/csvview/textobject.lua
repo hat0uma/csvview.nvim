@@ -1,11 +1,12 @@
 local M = {}
-local buf = require("csvview.buf")
+
+local util = require("csvview.util")
 
 --- Selects the current field.
 --- @param bufnr integer?
 --- @param opts? { include_delimiter?: boolean }
 function M.field(bufnr, opts)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
   local view = require("csvview.view").get(bufnr)
   if not view then
     vim.notify("csvview: not enabled for this buffer.")
@@ -16,7 +17,7 @@ function M.field(bufnr, opts)
   local include_delimiter = opts.include_delimiter == nil and false or opts.include_delimiter
 
   -- Find the window in which this buffer is displayed
-  local winid = buf.get_win(bufnr)
+  local winid = util.buf_get_win(bufnr)
   if not winid then
     error("Could not find window for buffer " .. bufnr)
   end

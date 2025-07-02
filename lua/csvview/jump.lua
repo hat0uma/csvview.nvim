@@ -1,6 +1,5 @@
 local M = {}
 
-local buf = require("csvview.buf")
 local util = require("csvview.util")
 
 --- Clamps a value between a minimum and maximum.
@@ -229,7 +228,7 @@ end
 ---@param bufnr? integer
 ---@param opts? CsvView.JumpOpts
 function M.field(bufnr, opts)
-  bufnr = buf.resolve_bufnr(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
 
   -- Set default options
   ---@type CsvView.JumpOpts
@@ -256,7 +255,7 @@ function M.field(bufnr, opts)
   end
 
   -- Get the window ID for the buffer
-  local winid = buf.get_win(bufnr)
+  local winid = util.buf_get_win(bufnr)
   if not winid then
     error("Window not found for buffer " .. bufnr)
   end
