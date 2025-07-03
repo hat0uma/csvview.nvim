@@ -231,7 +231,11 @@ After opening a CSV file, use the following commands to interact with the plugin
 #### Command Options
 
 - **`delimiter`** (string):  
-  Specifies the field delimiter character. See `options.parser.delimiter`.
+  Specifies the field delimiter character. For special characters, use escape sequences:
+  - Space: `\ ` (backslash followed by space)
+  - Tab: `\t`
+
+  See `options.parser.delimiter`.
 
 - **`quote_char`** (string):  
   The quote character for enclosing fields. See `options.parser.quote_char`.
