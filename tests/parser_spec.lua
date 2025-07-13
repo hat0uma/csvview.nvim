@@ -489,7 +489,7 @@ describe("CsvViewParser", function()
 
       local thread = coroutine.running()
       local results = {} ---@type { is_comment: boolean?, fields: CsvView.Parser.FieldInfo[] }[]
-      parser:parse_lines({
+      parser:parse_lines(opts.parser.async_chunksize, {
         on_end = vim.schedule_wrap(function()
           coroutine.resume(thread)
         end),
