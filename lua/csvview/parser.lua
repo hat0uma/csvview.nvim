@@ -78,6 +78,12 @@ local function resolve_delimiter(opts, bufnr)
   end
 
   if type(delim) == "table" then
+    -- Backwards compatibility for opts.parser.delimiter.default
+    if type(delim.default) == "string" then
+      vim.deprecate("opts.parser.delimiter.default", "opts.parser.delimiter.fallbacks", "2.0.0", "csvview.nvim")
+      delim.ft["csv"] = delim.default
+    end
+
     char = delim.ft[vim.bo.filetype]
     if not char then
       local dialect = sniff(bufnr, opts)
