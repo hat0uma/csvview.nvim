@@ -90,23 +90,34 @@ end
 ---@return number score Consistency score (0-1, higher is better)
 function M._calculate_consistency_score(sample_lines, delimiter, quote_char, comments, max_lookahead)
   local lines_to_check = #sample_lines
-
-  if lines_to_check < 2 then
-    return 0
-  end
+  local parser = create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
 
   local field_counts = {} ---@type integer[]
   local total_fields = 0
+  local records_count = 0
 
-  local parser = create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
+  local lnum = 1
+  while lnum <= lines_to_check do
+    local is_comment, fields, line_end = parser:parse_line(lnum)
 
-  for lnum = 1, lines_to_check do
-    local _, fields = parser:parse_line(lnum)
-    table.insert(field_counts, #fields)
-    total_fields = total_fields + #fields
+    -- Skip comment lines
+    if not is_comment and #fields > 0 then
+      local n_fields = #fields
+      table.insert(field_counts, n_fields)
+      total_fields = total_fields + n_fields
+      records_count = records_count + 1
+    end
+
+    -- Move to the next line
+    lnum = line_end + 1
   end
 
-  local avg_fields = total_fields / lines_to_check
+  -- Need at least 2 records to calculate consistency
+  if records_count < 2 then
+    return 0
+  end
+
+  local avg_fields = total_fields / records_count
 
   -- Skip if average is too low (likely not a valid delimiter)
   if avg_fields < 2 then
@@ -118,7 +129,7 @@ function M._calculate_consistency_score(sample_lines, delimiter, quote_char, com
   for _, count in ipairs(field_counts) do
     variance = variance + (count - avg_fields) ^ 2
   end
-  variance = variance / lines_to_check
+  variance = variance / records_count
 
   -- Convert variance to consistency score (lower variance = higher consistency)
   -- Use exponential decay to heavily penalize high variance

@@ -69,6 +69,7 @@ M.defaults = {
     --- @type CsvView.Options.Parser.Delimiter
     delimiter = {
       ft = {
+        csv = ",",
         tsv = "\t",
       },
       fallbacks = {
