@@ -1,5 +1,3 @@
-local CsvViewParser = require("csvview.parser")
-
 local M = {}
 
 ---@class CsvView.Sniffer.Dialect
@@ -73,7 +71,7 @@ end
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return CsvView.Parser parser The parser instance
 local function create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
-  return CsvViewParser:new_with_source(quote_char:byte(), delimiter, comments, max_lookahead, {
+  return require("csvview.parser"):new_with_source(quote_char:byte(), delimiter, comments, max_lookahead, {
     get_line = function(lnum)
       return sample_lines[lnum]
     end,

@@ -43,6 +43,24 @@ local function plain_text_delimiter(delim)
   }
 end
 
+--- Sniff the CSV dialect from the first few lines of the buffer.
+---@param bufnr integer Buffer number.
+---@param opts CsvView.InternalOptions
+---@param n_samples? integer Number of lines to sample for sniffing.
+---@return CsvView.Sniffer.Dialect
+local function sniff(bufnr, opts, n_samples)
+  n_samples = n_samples or 10
+  local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
+  local delimiter_candidates = type(opts.parser.delimiter) == "table" and opts.parser.delimiter.fallbacks or nil
+  local dialect = require("csvview.sniffer").sniff(sample_lines, {
+    comments = opts.parser.comments,
+    max_lookahead = opts.parser.max_lookahead,
+    quote_char = opts.parser.quote_char,
+    delimiter = delimiter_candidates,
+  })
+  return dialect
+end
+
 --- Resolve delimiter character
 ---@param opts CsvView.InternalOptions
 ---@param bufnr integer
@@ -55,12 +73,16 @@ local function resolve_delimiter(opts, bufnr)
     char = delim(bufnr)
   end
 
-  if type(delim) == "table" then
-    char = delim.ft[vim.bo.filetype] or delim.default
-  end
-
   if type(delim) == "string" then
     char = delim
+  end
+
+  if type(delim) == "table" then
+    char = delim.ft[vim.bo.filetype]
+    if not char then
+      local dialect = sniff(bufnr, opts)
+      char = dialect.delimiter
+    end
   end
 
   assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))

@@ -6,7 +6,7 @@ local M = {}
 ---@field quote_char? string
 ---@field comments? string[]
 ---@field max_lookahead? integer
----@alias CsvView.Options.Parser.Delimiter string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+---@alias CsvView.Options.Parser.Delimiter string | {ft: table<string,string>, fallbacks: string[]}| fun(bufnr:integer): string
 
 ---@class CsvView.Options.View
 ---@field min_column_width? integer
@@ -49,23 +49,35 @@ M.defaults = {
     --- @type integer
     async_chunksize = 50,
 
-    --- The delimiter character
-    --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
-    --- Currently, only fixed-length strings are supported. Regular expressions such as \s+ are not supported.
-    --- e.g:
-    ---  delimiter = ","
-    ---  delimiter = function(bufnr) return "," end
-    ---  delimiter = {
-    ---    default = ",",
-    ---    ft = {
-    ---      tsv = "\t",
-    ---    },
-    ---  }
+    --- Specifies the delimiter character to separate columns.
+    --- This can be configured in one of three ways:
+    ---
+    --- 1. As a single string for a fixed delimiter.
+    ---    e.g., delimiter = ","
+    ---
+    --- 2. As a function that dynamically returns the delimiter.
+    ---    e.g., delimiter = function(bufnr) return "\t" end
+    ---
+    --- 3. As a table for advanced configuration:
+    ---    - `ft`: Maps filetypes to specific delimiters. This has the highest priority.
+    ---    - `fallbacks`: An ordered list of delimiters to try for automatic detection
+    ---      when no `ft` rule matches. The plugin will test them in sequence and use
+    ---      the first one that highest scores based on the number of fields in each line.
+    ---
+    --- Note: Only fixed-length strings are supported as delimiters.
+    --- Regular expressions (e.g., `\s+`) are not currently supported.
     --- @type CsvView.Options.Parser.Delimiter
     delimiter = {
-      default = ",",
       ft = {
         tsv = "\t",
+      },
+      fallbacks = {
+        ",",
+        "\t",
+        ";",
+        "|",
+        ":",
+        " ",
       },
     },
 
