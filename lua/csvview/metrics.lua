@@ -307,7 +307,7 @@ end
 ---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, recalculate_columns, on_end)
   -- Parse specified range and update metrics.
-  self._parser:parse_lines({
+  self._parser:parse_lines(self._opts.parser.async_chunksize, {
     on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
       local new_endlnum = nil ---@type integer?
       local rows = construct_rows(lnum, is_comment, fields, parsed_endlnum, terminated)
