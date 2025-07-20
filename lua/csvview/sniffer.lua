@@ -8,6 +8,12 @@ local M = {}
 local DEFAULT_DELIMITERS = { ",", "\t", ";", "|", ":", " " }
 local DEFAULT_QUOTE_CHARS = { '"', "'" }
 
+local function debugf(fmt, ...)
+  if false then
+    print(string.format(fmt, ...))
+  end
+end
+
 ---
 ---@class CsvView.Sniffer.SniffOptions
 ---
@@ -30,10 +36,9 @@ function M.sniff(sample_lines, opts)
   local quote_char = opts.quote_char
   if type(quote_char) == "string" then
     dialect.quote_char = quote_char
-  elseif type(quote_char) == "table" then
-    dialect.quote_char = M._detect_quote_char(sample_lines, quote_char)
   else
-    dialect.quote_char = M._detect_quote_char(sample_lines, DEFAULT_QUOTE_CHARS)
+    local candidate_quote_chars = type(quote_char) == "table" and quote_char or DEFAULT_QUOTE_CHARS
+    dialect.quote_char = M._detect_quote_char(sample_lines, candidate_quote_chars)
   end
 
   -- Detect delimiter
@@ -60,6 +65,12 @@ function M.sniff(sample_lines, opts)
     opts.max_lookahead --
   )
 
+  debugf(
+    "Detected dialect: delimiter='%s', quote_char='%s', header_lnum=%s",
+    dialect.delimiter,
+    dialect.quote_char,
+    dialect.header_lnum or "nil"
+  )
   return dialect
 end
 
@@ -275,9 +286,14 @@ local FIELD_TYPE_VALIDATORS = {
   end,
 }
 
---- Transpose fields from rows to columns
----@param data string[][]
----@return string[][]
+--- Transpose fields from rows to columns.
+---
+--- This function intentionally uses the number of fields in the **first row** (`data[1]`)
+--- as the definitive number of columns for the entire table. Any fields in subsequent
+--- rows that exceed this count will be ignored.
+---
+---@param data string[][] The data to transpose.
+---@return string[][] The transposed data.
 local function transpose_fields(data)
   local transposed = {} ---@type string[][]
 
@@ -332,7 +348,87 @@ local function best_type_for_column(column_data)
   return best_type
 end
 
----Detect if the first row is a header
+--- @generic T
+--- Calculate the standard deviation and mean of a numeric function applied to an array
+---@param func fun(T): number The function to apply to each element in the array
+---@param array T[] The array of elements to analyze
+---@param start_index integer? The index to start from (default is 1)
+---@return number standard_deviation The standard deviation of the values
+---@return number mean The average of the values
+local function calc_stddev(func, array, start_index)
+  local total = 0
+  local count = 0
+
+  for i = start_index or 1, #array do
+    total = total + func(array[i])
+    count = count + 1 ---@type integer
+  end
+
+  if count == 0 then
+    return 0, 0
+  end
+
+  local mean = total / count
+  local variance = 0
+
+  for i = start_index or 1, #array do
+    variance = variance + (mean - func(array[i])) ^ 2
+  end
+  variance = variance / count
+
+  return math.sqrt(variance), mean
+end
+
+--- @generic T
+--- Calculate confidence interval for array
+---@param func fun(T): number The function to apply to each element in the array
+---@param array T[] The array of elements to analyze
+---@param start_index integer? The index to start from (default is 1)
+---@return number lower_bound The lower bound of the confidence interval
+---@return number upper_bound The upper bound of the confidence interval
+local function calc_confidence_interval(func, array, start_index)
+  local stddev, mean = calc_stddev(func, array, start_index)
+  local lower_bound = mean - stddev * 2
+  local upper_bound = mean + stddev * 2
+  return lower_bound, upper_bound
+end
+
+------
+---Detects if the first non-comment row is a header by analyzing its content
+---against the rest of the data.
+---
+---The algorithm evaluates each column independently and aggregates "evidence"
+---from two distinct heuristics. Both checks are performed on every column.
+---
+---1.  **Type Mismatch (+1 or -1 score):** It infers a data type (e.g., numeric)
+---    from the data rows. If the first row's value matches this type, it is
+---    less likely to be a header (-1). If it mismatches (e.g., a string header
+---    for a numeric column), it is more likely (+1).
+---
+---2.  **Length Deviation (+0.5 or -0.5 score):** It analyzes the string length
+---    of all values. If the first row's length is an outlier compared to the
+---    rest of the data, it is more likely to be a header (+0.5). If its length
+---    is typical, it is less likely (-0.5).
+---
+---### Scoring Examples:
+---
+---- **Strong Header Signal (Score: +1.5):**
+---  - Column: `["Age", "25", "30", "42"]`
+---  - Type mismatch: `+1` ("Age" is not numeric)
+---  - Length deviation: `+0.5` (length 3 is an outlier vs length 2)
+---
+---- **Strong Data Signal (Score: -1.5):**
+---  - Column: `["18", "25", "30", "42"]`
+---  - Type mismatch: `-1` ("18" is numeric)
+---  - Length deviation: `-0.5` (length 2 is typical)
+---
+---- **Ambiguous Text Signal (Score: +0.5):**
+---  - Column: `["Note", "First item", "Final item"]`
+---  - Type mismatch: `0` (no consistent type found)
+---  - Length deviation: `+0.5` (length 4 might be an outlier)
+---
+---The scores from all columns are totaled. If the final sum is positive, the
+---row is identified as a header.
 ---@param sample_lines string[] Sample lines to analyze
 ---@param delimiter string The delimiter character
 ---@param quote_char string The quote character
@@ -347,7 +443,7 @@ function M._detect_header(sample_lines, delimiter, quote_char, comments, max_loo
 
   local parser = create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
 
-  -- Find the first non-comment line
+  -- Find the first non-comment line as a header candidate
   local first_valid_lnum ---@type integer?
   local first_fields ---@type string[]
   local first_line_end = 1
@@ -372,11 +468,14 @@ function M._detect_header(sample_lines, delimiter, quote_char, comments, max_loo
 
   -- Collect data from subsequent lines
   local data = { first_fields } ---@type string[][]
-  for lnum = first_valid_lnum + 1, line_count do
-    local is_comment, fields = parse_line(parser, lnum)
+  local lnum = first_valid_lnum + 1
+  while lnum <= line_count do
+    local is_comment, fields, line_end = parse_line(parser, lnum)
     if not is_comment and #fields > 0 then
       table.insert(data, fields)
     end
+    -- Move to the next line
+    lnum = line_end + 1
   end
 
   -- transpose the data to analyze columns
@@ -384,39 +483,40 @@ function M._detect_header(sample_lines, delimiter, quote_char, comments, max_loo
 
   local header_evidence = 0
   for col_idx, column_data in ipairs(transposed) do
-    -- Determine the best type for data rows and evaluate the likelihood of being a header.
     local first = column_data[1]
+
+    -- Heuristic 1: Check for type mismatch
+    -- This provides strong evidence
     local best_type = best_type_for_column(column_data)
     if best_type then
       if FIELD_TYPE_VALIDATORS[best_type](first) then
-        -- If the first row is also of the same type, it is less likely to be a header
-        -- For example, if the first row is numeric and the others are also numeric
+        -- The first row has the same type as the data, less likely to be a header
+        debugf("Column %d is of type %s header evidence -1", col_idx, best_type)
         header_evidence = header_evidence - 1
       else
-        -- If the first row is of a different type, it is more likely to be a header
-        -- For example, if the first row is a string and the others are numeric
+        -- The first row has a different type, more likely to be a header
+        debugf("Column %d is of type %s header evidence +1", col_idx, best_type)
         header_evidence = header_evidence + 1
       end
+    end
+
+    -- Heuristic 2: Check for string length deviation
+    -- This is checked for all columns and provides weaker evidence
+    local lower_bound, upper_bound = calc_confidence_interval(string.len, column_data, 2)
+    local first_len = string.len(first)
+    if lower_bound <= first_len and first_len <= upper_bound then
+      -- The first row's length is typical for the column, less likely to be a header
+      debugf("Column %d %d <= %d <= %d header evidence -0.5", col_idx, lower_bound, first_len, upper_bound)
+      header_evidence = header_evidence - 0.5
     else
-      -- If no consistent type was found, treat it as text
-      -- For text, check if all rows except the first have the same length.
-      -- This is because it may contain IDs or other unique values.
-      local rest = vim.iter(column_data):skip(1)
-      local data_row_len = #rest:next()
-      if rest:all(function(field)
-        return #field == data_row_len
-      end) then
-        if #first == data_row_len then
-          header_evidence = header_evidence - 1
-        else
-          header_evidence = header_evidence + 1
-        end
-      end
+      -- The first row's length is an outlier, more likely to be a header
+      debugf("Column %d %d <= %d <= %d header evidence +0.5", col_idx, lower_bound, first_len, upper_bound)
+      header_evidence = header_evidence + 0.5
     end
   end
 
   if header_evidence > 0 then
-    -- If the first row has more evidence of being a header, return its line number
+    debugf("Header detected at line %d with evidence %.2f", first_valid_lnum, header_evidence)
     return first_valid_lnum
   end
 
