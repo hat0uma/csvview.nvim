@@ -43,75 +43,6 @@ local function plain_text_delimiter(delim)
   }
 end
 
---- Sniff the CSV dialect from the first few lines of the buffer.
----@param bufnr integer Buffer number.
----@param opts CsvView.InternalOptions
----@param n_samples? integer Number of lines to sample for sniffing.
----@return CsvView.Sniffer.Dialect
-local function sniff(bufnr, opts, n_samples)
-  n_samples = n_samples or 10
-  local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
-  local delimiter_candidates = type(opts.parser.delimiter) == "table" and opts.parser.delimiter.fallbacks or nil
-  local dialect = require("csvview.sniffer").sniff(sample_lines, {
-    comments = opts.parser.comments,
-    max_lookahead = opts.parser.max_lookahead,
-    quote_char = opts.parser.quote_char,
-    delimiter = delimiter_candidates,
-  })
-  return dialect
-end
-
---- Resolve delimiter character
----@param opts CsvView.InternalOptions
----@param bufnr integer
----@return CsvView.Parser.DelimiterPolicy
-local function resolve_delimiter(opts, bufnr)
-  local delim = opts.parser.delimiter
-  ---@diagnostic disable-next-line: no-unknown
-  local char
-  if type(delim) == "function" then
-    char = delim(bufnr)
-  end
-
-  if type(delim) == "string" then
-    char = delim
-  end
-
-  if type(delim) == "table" then
-    -- Backwards compatibility for opts.parser.delimiter.default
-    if type(delim.default) == "string" then
-      vim.deprecate("opts.parser.delimiter.default", "opts.parser.delimiter.fallbacks", "2.0.0", "csvview.nvim")
-      delim.ft["csv"] = delim.default
-    end
-
-    char = delim.ft[vim.bo.filetype]
-    if not char then
-      local dialect = sniff(bufnr, opts)
-      char = dialect.delimiter
-    end
-  end
-
-  assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))
-  return plain_text_delimiter(char)
-end
-
---- Get quote char character
----@param bufnr integer
----@param opts CsvView.InternalOptions
----@return integer
-local function quote_char_byte(bufnr, opts)
-  local delim = opts.parser.quote_char
-  ---@diagnostic disable-next-line: no-unknown
-  local char
-  if type(delim) == "string" then
-    char = delim
-  end
-
-  assert(type(char) == "string", string.format("quote char must be a string, got %s", type(char)))
-  assert(#char == 1, string.format("quote char must be a single character, got %s", char))
-  return char:byte()
-end
-
 --- @class CsvView.Parser.Source
 --- @field get_line fun(lnum:integer):string? Function to get a line by line number. lnum is 1-indexed.
 --- @field get_line_count fun():integer Function to get the total number of lines in the buffer.
@@ -128,11 +59,13 @@ CsvViewParser.__index = CsvViewParser
 --- Create a new CsvView.Parser.
 ---@param bufnr integer Buffer number.
 ---@param opts CsvView.InternalOptions Options for parsing.
+---@param quote_char string Quote character
+---@param delimiter string Delimiter string.
 ---@return CsvView.Parser
-function CsvViewParser:new(bufnr, opts)
+function CsvViewParser:new(bufnr, opts, quote_char, delimiter)
   local obj = setmetatable({}, self)
-  obj._quote_char = quote_char_byte(bufnr, opts)
-  obj._delimiter = resolve_delimiter(opts, bufnr)
+  obj._quote_char = quote_char:byte()
+  obj._delimiter = plain_text_delimiter(delimiter)
   obj._comments = opts.parser.comments
   obj._max_lookahead = opts.parser.max_lookahead
   obj._source = {

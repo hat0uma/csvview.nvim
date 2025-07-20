@@ -18,6 +18,7 @@ end
 --- @field public bufnr integer
 --- @field public metrics CsvView.Metrics
 --- @field public opts CsvView.InternalOptions
+--- @field public header_lnum integer? 1-indexed line number of header
 --- @field private _extmarks table<integer,integer[]> 1-based line -> extmark ids
 --- @field private _on_dispose function? called when view is disposed
 --- @field private _locked boolean
@@ -27,18 +28,21 @@ local View = {}
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
 ---@param opts CsvView.InternalOptions
+---@param header_lnum integer?
 ---@param on_dispose? fun()
 ---@return CsvView.View
-function View:new(bufnr, metrics, opts, on_dispose)
+function View:new(bufnr, metrics, opts, header_lnum, on_dispose)
   self.__index = self
 
   local obj = {}
   obj.bufnr = bufnr
   obj.metrics = metrics
   obj.opts = opts
+  obj.header_lnum = header_lnum
   obj._extmarks = {}
   obj._on_dispose = on_dispose
   obj._locked = false
+
   return setmetatable(obj, self)
 end
 
@@ -238,7 +242,7 @@ function View:_render_line(lnum)
   end
 
   -- highlight header
-  if lnum == self.opts.view.header_lnum then
+  if lnum == self.header_lnum then
     self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 

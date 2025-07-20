@@ -166,7 +166,7 @@ local function should_show_sticky_header(winid, view)
   end
 
   -- Do not show if the header line is not set
-  local header_lnum = view.opts.view.header_lnum
+  local header_lnum = view.header_lnum
   if not header_lnum then
     return false
   end
@@ -246,7 +246,7 @@ function M.redraw()
     local view = get_opened_csvview(winid)
     if view and should_show_sticky_header(winid, view) then
       show_sticky_header(winid, view)
-      sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.opts.view.header_lnum)
+      sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.header_lnum)
     else
       M.close_if_opened(winid)
     end

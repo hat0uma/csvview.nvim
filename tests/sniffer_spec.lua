@@ -2,15 +2,12 @@ local sniffer = require("csvview.sniffer")
 local testutil = require("tests.testutil")
 
 describe("csvview.sniffer", function()
-  local opts ---@type CsvView.Sniffer.SniffOptions
-  before_each(function()
-    opts = {
-      comments = { "#" },
-      max_lookahead = 50,
-    }
-  end)
+  local opts = {
+    comments = { "#" },
+    max_lookahead = 50,
+  }
 
-  describe("sniff_delimiter", function()
+  describe("detect_delimiter", function()
     it("should detect comma delimiter", function()
       local lines = {
         "name,age,city",
@@ -18,8 +15,8 @@ describe("csvview.sniffer", function()
         "Jane,30,Los Angeles",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals(",", delimiter)
     end)
 
     it("should detect tab delimiter", function()
@@ -29,8 +26,8 @@ describe("csvview.sniffer", function()
         "Jane\t30\tLos Angeles",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals("\t", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals("\t", delimiter)
     end)
 
     it("should detect semicolon delimiter", function()
@@ -40,8 +37,8 @@ describe("csvview.sniffer", function()
         "Jane;30;Los Angeles",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(";", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals(";", delimiter)
     end)
 
     it("should detect pipe delimiter", function()
@@ -51,8 +48,8 @@ describe("csvview.sniffer", function()
         "Jane|30|Los Angeles",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals("|", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals("|", delimiter)
     end)
 
     it("should handle quoted fields with embedded delimiters", function()
@@ -62,8 +59,8 @@ describe("csvview.sniffer", function()
         'Jane,30,"Los Angeles, CA"',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals(",", delimiter)
     end)
 
     it("should prefer delimiter with highest consistency", function()
@@ -74,9 +71,9 @@ describe("csvview.sniffer", function()
         "Bob,35;Chicago",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
       -- Should prefer comma over semicolon due to better consistency
-      assert.equals(",", dialect.delimiter)
+      assert.equals(",", delimiter)
     end)
 
     it("should use custom delimiter list", function()
@@ -86,23 +83,28 @@ describe("csvview.sniffer", function()
         "Jane:30:Los Angeles",
       }
 
-      local custom_opts = vim.tbl_deep_extend("force", opts, { delimiter = { ",", ":" } })
-      local dialect = sniffer.sniff(lines, custom_opts)
-      assert.equals(":", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", ":" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals(":", delimiter)
     end)
 
     it("should return default delimiter for empty buffer", function()
-      local dialect = sniffer.sniff({}, opts)
-      assert.equals(",", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter({}, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      assert.equals(",", delimiter)
     end)
 
     it("should return default delimiter for single line", function()
-      local dialect = sniffer.sniff({ "single line" }, opts)
-      assert.equals(",", dialect.delimiter)
+      local delimiter = sniffer.detect_delimiter(
+        { "single line" },
+        { ",", "\t", ";", "|" },
+        '"',
+        opts.comments,
+        opts.max_lookahead
+      )
+      assert.equals(",", delimiter)
     end)
   end)
 
-  describe("sniff_quote_char", function()
+  describe("detect_quote_char", function()
     it("should detect double quote character", function()
       local lines = {
         '"name","age","city"',
@@ -110,8 +112,8 @@ describe("csvview.sniffer", function()
         '"Jane","30","Los Angeles"',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals('"', dialect.quote_char)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      assert.equals('"', quote_char)
     end)
 
     it("should detect single quote character", function()
@@ -121,8 +123,8 @@ describe("csvview.sniffer", function()
         "'Jane','30','Los Angeles'",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals("'", dialect.quote_char)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      assert.equals("'", quote_char)
     end)
 
     it("should handle escaped quotes", function()
@@ -132,8 +134,8 @@ describe("csvview.sniffer", function()
         '"Jane","She replied ""Hi"""',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals('"', dialect.quote_char)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      assert.equals('"', quote_char)
     end)
 
     it("should return default quote char for no quotes", function()
@@ -143,12 +145,12 @@ describe("csvview.sniffer", function()
         "Jane,30,Los Angeles",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals('"', dialect.quote_char)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      assert.equals('"', quote_char)
     end)
   end)
 
-  describe("sniff_header_lnum", function()
+  describe("detect_header", function()
     it("should detect header with numeric data", function()
       local lines = {
         "name,age,salary",
@@ -157,8 +159,8 @@ describe("csvview.sniffer", function()
         "Bob,35,70000",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should not detect header when first row is numeric", function()
@@ -168,8 +170,8 @@ describe("csvview.sniffer", function()
         "3,35,70000",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.is_nil(dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.is_nil(header_lnum)
     end)
 
     it("should handle mixed data types", function()
@@ -180,8 +182,8 @@ describe("csvview.sniffer", function()
         "3,Bob,true",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should detect header with comments", function()
@@ -193,8 +195,8 @@ describe("csvview.sniffer", function()
         "3,Bob,true",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(2, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(2, header_lnum)
     end)
 
     it("should detect header with date columns", function()
@@ -205,8 +207,8 @@ describe("csvview.sniffer", function()
         "Bob,1992-06-08,11:45:00",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should not detect header when all text rows are similar", function()
@@ -218,8 +220,8 @@ describe("csvview.sniffer", function()
         "shoes,sold,medium",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.is_nil(dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.is_nil(header_lnum)
     end)
 
     it("should handle boolean values", function()
@@ -230,8 +232,8 @@ describe("csvview.sniffer", function()
         "Bob,1,y",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should work with float numbers", function()
@@ -242,18 +244,18 @@ describe("csvview.sniffer", function()
         "Tool,45.00,0.09",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should return nil for single line", function()
-      local dialect = sniffer.sniff({ "name,age,city" }, opts)
-      assert.is_nil(dialect.header_lnum)
+      local header_lnum = sniffer.detect_header({ "name,age,city" }, ",", '"', opts.comments, opts.max_lookahead)
+      assert.is_nil(header_lnum)
     end)
 
     it("should return nil for empty buffer", function()
-      local dialect = sniffer.sniff({}, opts)
-      assert.is_nil(dialect.header_lnum)
+      local header_lnum = sniffer.detect_header({}, ",", '"', opts.comments, opts.max_lookahead)
+      assert.is_nil(header_lnum)
     end)
 
     it("should handle inconsistent column counts gracefully", function()
@@ -265,8 +267,8 @@ describe("csvview.sniffer", function()
         "Alice,28,Boston",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should detect header with many columns", function()
@@ -277,8 +279,8 @@ describe("csvview.sniffer", function()
         "15,16,17,18,19,20,21",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
 
     it("should handle quoted headers", function()
@@ -289,12 +291,12 @@ describe("csvview.sniffer", function()
         '"Widget C",39.99,true',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(1, dialect.header_lnum)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      assert.equals(1, header_lnum)
     end)
   end)
 
-  describe("sniff", function()
+  describe("integrated detection", function()
     it("should detect all dialect components", function()
       local lines = {
         '"name","age","city"',
@@ -303,10 +305,14 @@ describe("csvview.sniffer", function()
         '"Bob",35,"Chicago"',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+
+      assert.equals(",", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
 
     it("should work with TSV files", function()
@@ -317,10 +323,14 @@ describe("csvview.sniffer", function()
         "Bob\t35\tChicago",
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals("\t", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+
+      assert.equals("\t", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
 
     it("should handle complex CSV with various features", function()
@@ -331,40 +341,14 @@ describe("csvview.sniffer", function()
         'Bob,35,"789 Pine Rd, Chicago, IL",78.9',
       }
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
-    end)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
 
-    it("should respect fixed quote_char parameter", function()
-      local lines = {
-        '"name","age","city"',
-        '"John",25,"New York"',
-        '"Jane",30,"Los Angeles"',
-        '"Bob",35,"Chicago"',
-      }
-
-      local custom_opts = vim.tbl_deep_extend("force", opts, { quote_char = "'" })
-      local dialect = sniffer.sniff(lines, custom_opts)
-      assert.equals(",", dialect.delimiter)
-      assert.equals("'", dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
-    end)
-
-    it("should respect fixed delimiter parameter", function()
-      local lines = {
-        "name|age|city",
-        "John|25|New York",
-        "Jane|30|Los Angeles",
-        "Bob|35|Chicago",
-      }
-
-      local custom_opts = vim.tbl_deep_extend("force", opts, { delimiter = "|", quote_char = "@" })
-      local dialect = sniffer.sniff(lines, custom_opts)
-      assert.equals("|", dialect.delimiter)
-      assert.equals("@", dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      assert.equals(",", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
   end)
 
@@ -372,28 +356,40 @@ describe("csvview.sniffer", function()
     it("should work with test.csv fixture", function()
       local lines = testutil.readlines("tests/fixtures/test.csv")
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+
+      assert.equals(",", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
 
     it("should work with test.tsv fixture", function()
       local lines = testutil.readlines("tests/fixtures/test.tsv")
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals("\t", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+
+      assert.equals("\t", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
 
     it("should work with minimal.csv fixture", function()
       local lines = testutil.readlines("tests/fixtures/minimal.csv")
 
-      local dialect = sniffer.sniff(lines, opts)
-      assert.equals(",", dialect.delimiter)
-      assert.equals('"', dialect.quote_char)
-      assert.equals(1, dialect.header_lnum)
+      local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
+      local delimiter =
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+
+      assert.equals(",", delimiter)
+      assert.equals('"', quote_char)
+      assert.equals(1, header_lnum)
     end)
   end)
 end)

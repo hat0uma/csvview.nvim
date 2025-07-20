@@ -7,71 +7,12 @@ local M = {}
 
 local DEFAULT_DELIMITERS = { ",", "\t", ";", "|", ":", " " }
 local DEFAULT_QUOTE_CHARS = { '"', "'" }
+local DEFAULT_BUF_N_SAMPLES = 10
 
 local function debugf(fmt, ...)
   if false then
     print(string.format(fmt, ...))
   end
-end
-
----
----@class CsvView.Sniffer.SniffOptions
----
----@field delimiter string | string[] | nil Delimiter character to use, or nil to auto-detect
----
----@field quote_char string | string[] | nil Quote character to use, or nil to auto-detect
----
----@field comments string[]
----
----@field max_lookahead integer Maximum lookahead for parsing
-
----Sniff CSV dialect from the buffer
----@param sample_lines string[] Sample lines to use instead of the buffer
----@param opts CsvView.Sniffer.SniffOptions
----@return CsvView.Sniffer.Dialect dialect The detected CSV dialect
-function M.sniff(sample_lines, opts)
-  local dialect = {}
-
-  -- Detect quote character
-  local quote_char = opts.quote_char
-  if type(quote_char) == "string" then
-    dialect.quote_char = quote_char
-  else
-    local candidate_quote_chars = type(quote_char) == "table" and quote_char or DEFAULT_QUOTE_CHARS
-    dialect.quote_char = M._detect_quote_char(sample_lines, candidate_quote_chars)
-  end
-
-  -- Detect delimiter
-  local delimiter = opts.delimiter
-  if type(delimiter) == "string" then
-    dialect.delimiter = delimiter
-  else
-    local candidate_delimiters = type(delimiter) == "table" and delimiter or DEFAULT_DELIMITERS
-    dialect.delimiter = M._detect_delimiter(
-      sample_lines,
-      candidate_delimiters,
-      dialect.quote_char,
-      opts.comments,
-      opts.max_lookahead --
-    )
-  end
-
-  -- Detect header
-  dialect.header_lnum = M._detect_header(
-    sample_lines,
-    dialect.delimiter,
-    dialect.quote_char,
-    opts.comments,
-    opts.max_lookahead --
-  )
-
-  debugf(
-    "Detected dialect: delimiter='%s', quote_char='%s', header_lnum=%s",
-    dialect.delimiter,
-    dialect.quote_char,
-    dialect.header_lnum or "nil"
-  )
-  return dialect
 end
 
 --- Create a parser for the given sample lines
@@ -151,9 +92,10 @@ end
 
 ---Detect quote character by looking for paired quotes
 ---@param sample_lines string[] Sample lines to analyze
----@param quote_chars string[] Possible quote characters
+---@param quote_chars? string[] Possible quote characters
 ---@return string quote_char The detected quote character
-function M._detect_quote_char(sample_lines, quote_chars)
+function M.detect_quote_char(sample_lines, quote_chars)
+  quote_chars = quote_chars or DEFAULT_QUOTE_CHARS
   local sample = table.concat(sample_lines, "\n")
   local quote_scores = {} ---@type table<string, number>
 
@@ -205,12 +147,13 @@ end
 
 ---Detect delimiter by analyzing field consistency
 ---@param sample_lines string[] Sample lines to analyze
----@param delimiters string[] Possible delimiter characters
+---@param delimiters? string[] Possible delimiter characters
 ---@param quote_char string The quote character to use
 ---@param comments string[] Comments to ignore
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return string delimiter The detected delimiter character
-function M._detect_delimiter(sample_lines, delimiters, quote_char, comments, max_lookahead)
+function M.detect_delimiter(sample_lines, delimiters, quote_char, comments, max_lookahead)
+  delimiters = delimiters or DEFAULT_DELIMITERS
   local delimiter_scores = {} ---@type table<string, number> -- Store scores for each delimiter
 
   for _, delimiter in ipairs(delimiters) do
@@ -435,7 +378,7 @@ end
 ---@param comments string[] Comments to ignore
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return integer? header_lnum The line number of the header row, if detected
-function M._detect_header(sample_lines, delimiter, quote_char, comments, max_lookahead)
+function M.detect_header(sample_lines, delimiter, quote_char, comments, max_lookahead)
   local line_count = #sample_lines
   if line_count < 2 then
     return nil
@@ -521,6 +464,45 @@ function M._detect_header(sample_lines, delimiter, quote_char, comments, max_loo
   end
 
   return nil
+end
+
+--- Detects the delimiter for a buffer by sampling lines
+---@param bufnr integer Buffer number to analyze
+---@param quote_char string Quote character to use
+---@param comments string[] Comments to ignore
+---@param max_lookahead integer Maximum lookahead for parsing
+---@param candidates string[]? Possible delimiters to check
+---@param n_samples integer? Number of lines to sample
+---@return string delimiter The detected delimiter character
+function M.buf_detect_delimiter(bufnr, quote_char, comments, max_lookahead, candidates, n_samples)
+  n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
+  local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
+  return M.detect_delimiter(sample_lines, candidates, quote_char, comments, max_lookahead)
+end
+
+--- Detects the quote character for a buffer by sampling lines
+---@param bufnr integer Buffer number to analyze
+---@param candidates string[]? Possible quote characters to check
+---@param n_samples integer? Number of lines to sample
+---@return string quote_char The detected quote character
+function M.buf_detect_quote_char(bufnr, candidates, n_samples)
+  n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
+  local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
+  return M.detect_quote_char(sample_lines, candidates)
+end
+
+--- Detects the header row for a buffer by sampling lines
+---@param bufnr integer Buffer number to analyze
+---@param delimiter string The delimiter character to use
+---@param quote_char string The quote character to use
+---@param comments string[] Comments to ignore
+---@param max_lookahead integer Maximum lookahead for parsing
+---@param n_samples integer? Number of lines to sample
+---@return integer? header_lnum The line number of the header row, if detected
+function M.buf_detect_header(bufnr, delimiter, quote_char, comments, max_lookahead, n_samples)
+  n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
+  local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
+  return M.detect_header(sample_lines, delimiter, quote_char, comments, max_lookahead)
 end
 
 return M

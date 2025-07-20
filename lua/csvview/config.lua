@@ -133,8 +133,8 @@ M.defaults = {
     --- The line number of the header
     --- If this is set, the line is treated as a header. and used for sticky header feature.
     --- see also: `view.sticky_header`
-    --- @type integer|false
-    header_lnum = false,
+    --- @type integer|false|true
+    header_lnum = true,
 
     --- The sticky header feature settings
     --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
