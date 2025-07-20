@@ -14,6 +14,7 @@ A comfortable CSV/TSV editing plugin for Neovim.
 - **Text Objects & Motions**: Conveniently select fields or move across fields/rows.
 - **Comment Ignoring**: Skips specified comment lines from the table display.
 - **Sticky Header**: Keeps the header row visible while scrolling.
+- **Auto-Detection**: Automatically detects delimiters and headers based on file content.
 - **Flexible Settings**: Customizable delimiter and comment prefix.
 - **Two Display Modes**:
   - `highlight`: Highlights delimiters.
@@ -264,6 +265,55 @@ lua require('csvview').setup()
 ## 📋 Feature Guide
 
 <details>
+<summary><strong>Display Configuration</strong></summary>
+
+#### Display Modes
+
+**Highlight Mode (Default)**
+
+Highlights delimiter characters in place:
+
+```lua
+{
+  view = {
+    display_mode = "highlight",
+  },
+}
+```
+
+**Border Mode**
+
+Replaces delimiters with vertical borders (`│`):
+
+```lua
+{
+  view = {
+    display_mode = "border",
+  },
+}
+```
+
+**Toggle display modes:**
+
+```vim
+:CsvViewEnable display_mode=highlight
+:CsvViewEnable display_mode=border
+```
+
+#### Column Layout
+
+```lua
+{
+  view = {
+    min_column_width = 5,  -- Minimum width for each column
+    spacing = 2,           -- Space between columns
+  },
+}
+```
+
+</details>
+
+<details>
 <summary><strong>Delimiter Configuration & Auto-Detection</strong></summary>
 
 csvview.nvim provides flexible delimiter handling with intelligent auto-detection capabilities.
@@ -329,9 +379,6 @@ The plugin automatically detects the most appropriate delimiter by analyzing you
 }
 ```
 
-> [!NOTE]
-> Multi-character delimiters are supported (e.g., `||`, `::`, `<>`), but regular expression patterns are not supported (e.g., `\s+`).
-
 #### Command-line Delimiter Options
 
 ```vim
@@ -347,54 +394,7 @@ The plugin automatically detects the most appropriate delimiter by analyzing you
 :CsvViewEnable delimiter=\t  " Tab
 ```
 
-</details>
-
-<details>
-<summary><strong>Display Configuration</strong></summary>
-
-#### Display Modes
-
-**Highlight Mode (Default)**
-
-Highlights delimiter characters in place:
-
-```lua
-{
-  view = {
-    display_mode = "highlight",
-  },
-}
-```
-
-**Border Mode**
-
-Replaces delimiters with vertical borders (`│`):
-
-```lua
-{
-  view = {
-    display_mode = "border",
-  },
-}
-```
-
-**Toggle display modes:**
-
-```vim
-:CsvViewEnable display_mode=highlight
-:CsvViewEnable display_mode=border
-```
-
-#### Column Layout
-
-```lua
-{
-  view = {
-    min_column_width = 5,  -- Minimum width for each column
-    spacing = 2,           -- Space between columns
-  },
-}
-```
+**NOTE** : Multi-character delimiters are supported (e.g., `||`, `::`, `<>`), but regular expression patterns are not supported (e.g., `\s+`).
 
 </details>
 
@@ -573,28 +573,6 @@ In this example:
 :CsvViewEnable quote_char=
 ```
 
-#### Multi-line Field Support
-
-Quoted fields can span multiple lines:
-
-```csv
-id,description
-1,"This is a long
-description that spans
-multiple lines"
-2,"Another field"
-```
-
-Configure the parser for multi-line fields:
-
-```lua
-{
-  parser = {
-    max_lookahead = 50,  -- Maximum lines to search for closing quotes
-  },
-}
-```
-
 </details>
 
 <details>
@@ -675,28 +653,6 @@ Only the data rows (`name,age,city`, `John,25,NYC`, `Jane,30,LA`) will be displa
 
 " Multiple comment types (requires Lua configuration)
 ```
-
-#### Advanced Comment Configuration
-
-```lua
-{
-  parser = {
-    comments = {
-      "#",        -- Shell/Python style
-      "//",       -- C++ style  
-      "--",       -- SQL style
-      ";;",       -- Custom comment prefix
-    },
-  },
-}
-```
-
-#### Use Cases
-
-- **Data files with metadata**: Skip header comments explaining the data format
-- **Generated CSV files**: Ignore generator information or timestamps  
-- **Configuration files**: Skip documentation lines in CSV-like config files
-- **Log analysis**: Focus on data rows while ignoring log headers
 
 </details>
 
