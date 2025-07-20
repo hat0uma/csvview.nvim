@@ -12,7 +12,7 @@ local M = {}
 ---@field min_column_width? integer
 ---@field spacing? integer
 ---@field display_mode? CsvView.Options.View.DisplayMode
----@field header_lnum? integer|false
+---@field header_lnum? integer|false|true
 ---@field sticky_header? CsvView.Options.View.StickyHeader
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
 
@@ -130,9 +130,21 @@ M.defaults = {
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
 
-    --- The line number of the header
-    --- If this is set, the line is treated as a header. and used for sticky header feature.
-    --- see also: `view.sticky_header`
+    --- The line number of the header row
+    --- Controls which line should be treated as the header for the CSV table.
+    --- This affects both visual styling and the sticky header feature.
+    ---
+    --- Values:
+    --- - `true`: Automatically detect the header line (default)
+    --- - `integer`: Specific line number to use as header (1-based)
+    --- - `false`: No header line, treat all lines as data rows
+    ---
+    --- When a header is defined, it will be:
+    --- - Highlighted with the CsvViewHeaderLine highlight group
+    --- - Used for the sticky header feature if enabled
+    --- - Excluded from normal data processing in some contexts
+    ---
+    --- See also: `view.sticky_header`
     --- @type integer|false|true
     header_lnum = true,
 

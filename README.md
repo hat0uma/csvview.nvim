@@ -173,11 +173,23 @@ lua require('csvview').setup()
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
 
-    --- The line number of the header
-    --- If this is set, the line is treated as a header. and used for sticky header feature.
-    --- see also: `view.sticky_header`
-    --- @type integer|false
-    header_lnum = false,
+    --- The line number of the header row
+    --- Controls which line should be treated as the header for the CSV table.
+    --- This affects both visual styling and the sticky header feature.
+    ---
+    --- Values:
+    --- - `true`: Automatically detect the header line (default)
+    --- - `integer`: Specific line number to use as header (1-based)
+    --- - `false`: No header line, treat all lines as data rows
+    ---
+    --- When a header is defined, it will be:
+    --- - Highlighted with the CsvViewHeaderLine highlight group
+    --- - Used for the sticky header feature if enabled
+    --- - Excluded from normal data processing in some contexts
+    ---
+    --- See also: `view.sticky_header`
+    --- @type integer|false|true
+    header_lnum = true,
 
     --- The sticky header feature settings
     --- If `view.header_lnum` is set, the header line is displayed at the top of the window.
@@ -229,152 +241,585 @@ lua require('csvview').setup()
 
 </details>
 
-## 🚀 Usage
+## 🎯 Getting Started
 
-After opening a CSV file, use the following commands to interact with the plugin:
-
-### Commands
+#### Basic Commands
 
 | Command                    | Description                                      |
 |----------------------------|--------------------------------------------------|
-| `:CsvViewEnable [options]` | Enable CSV view with the specified options.      |
-| `:CsvViewDisable`          | Disable CSV view.                                |
-| `:CsvViewToggle [options]` | Toggle CSV view with the specified options.      |
+| `:CsvViewEnable [options]` | Enable CSV view with the specified options      |
+| `:CsvViewDisable`          | Disable CSV view                                 |
+| `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
 
-#### Command Options
-
-- **`delimiter`** (string):  
-  Specifies the field delimiter character. For special characters, use escape sequences:
-  - Space: `\ ` (backslash followed by space)
-  - Tab: `\t`
-
-  See `options.parser.delimiter`.
-
-- **`quote_char`** (string):  
-  The quote character for enclosing fields. See `options.parser.quote_char`.
-
-- **`comment`** (string):  
-  The comment prefix character. See `options.parser.comments`.
-
-- **`display_mode`** (string):  
-  Method for displaying delimiters. Possible values are `highlight` and `border`. See `options.view.display_mode`.
-
-- **`header_lnum`** (number):  
-  Line number (1-based) to treat as a header. If set, that line remains “sticky” at the top when scrolling. See `options.view.header_lnum`.
-
-### Example
-
-To toggle CSV view, use the following command. By default, the delimiter is `,` for CSV files and `\t` for TSV files.
+#### Quick Start
 
 ```vim
+" Enable CSV view with automatic delimiter detection
 :CsvViewToggle
+
+" Enable with specific settings
+:CsvViewToggle delimiter=, display_mode=border header_lnum=1
 ```
 
-To toggle CSV view with a custom field delimiter, a custom string delimiter and comment, use the following command.
+## 📋 Feature Guide
+
+<details>
+<summary><strong>Delimiter Configuration & Auto-Detection</strong></summary>
+
+csvview.nvim provides flexible delimiter handling with intelligent auto-detection capabilities.
+
+#### Auto-Detection (Recommended)
+
+The plugin automatically detects the most appropriate delimiter by analyzing your file content:
+
+```lua
+-- Default configuration with auto-detection
+{
+  parser = {
+    delimiter = {
+      ft = {
+        csv = ",",        -- Always use comma for .csv files
+        tsv = "\t",       -- Always use tab for .tsv files
+      },
+      fallbacks = {       -- Try these delimiters in order for other files
+        ",",              -- Comma (most common)
+        "\t",             -- Tab
+        ";",              -- Semicolon
+        "|",              -- Pipe
+        ":",              -- Colon
+        " ",              -- Space
+      },
+    },
+  },
+}
+```
+
+**How auto-detection works:**
+
+1. If the file type matches `ft` rules (e.g., `.csv` → comma), use that delimiter
+2. Otherwise, test each delimiter in `fallbacks` order
+3. Score each delimiter based on field consistency across lines
+4. Select the delimiter with the highest score
+
+#### Manual Delimiter Configuration
+
+**Fixed delimiter for all files:**
+
+```lua
+{
+  parser = {
+    delimiter = ",",  -- Always use comma
+  },
+}
+```
+
+**Dynamic delimiter with function:**
+
+```lua
+{
+  parser = {
+    delimiter = function(bufnr)
+      local filename = vim.api.nvim_buf_get_name(bufnr)
+      if filename:match("%.tsv$") then
+        return "\t"
+      end
+      return ","
+    end,
+  },
+}
+```
+
+> [!NOTE]
+> Multi-character delimiters are supported (e.g., `||`, `::`, `<>`), but regular expression patterns are not supported (e.g., `\s+`).
+
+#### Command-line Delimiter Options
 
 ```vim
-:CsvViewToggle delimiter=, quote_char=' comment=# display_mode=border
+" For unknown file formats, let auto-detection work
+:CsvViewEnable
+
+" Specific delimiters
+:CsvViewEnable delimiter=,
+:CsvViewEnable delimiter=\t
+
+" Special characters (use escape sequences)
+:CsvViewEnable delimiter=\   " Space
+:CsvViewEnable delimiter=\t  " Tab
 ```
 
-### Lua API
+</details>
 
-Below are the core Lua functions that you can call programmatically. If you want to map these functions to key bindings, you can use the `opts.keymaps` option.
+<details>
+<summary><strong>Display Configuration</strong></summary>
 
-#### Basic Functions
+#### Display Modes
 
-- `require('csvview').enable()`: Enable CSV view.
-- `require('csvview').disable()`: Disable CSV view.
-- `require('csvview').toggle()`: Toggle CSV view.
-- `require('csvview').is_enabled()`: Check if CSV view is enabled.
+**Highlight Mode (Default)**
 
-#### Jump Motions
-
-You can move across CSV fields and rows with the following API.
+Highlights delimiter characters in place:
 
 ```lua
--- Basic usage:
+{
+  view = {
+    display_mode = "highlight",
+  },
+}
+```
+
+**Border Mode**
+
+Replaces delimiters with vertical borders (`│`):
+
+```lua
+{
+  view = {
+    display_mode = "border",
+  },
+}
+```
+
+**Toggle display modes:**
+
+```vim
+:CsvViewEnable display_mode=highlight
+:CsvViewEnable display_mode=border
+```
+
+#### Column Layout
+
+```lua
+{
+  view = {
+    min_column_width = 5,  -- Minimum width for each column
+    spacing = 2,           -- Space between columns
+  },
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Sticky Header & Header Auto-Detection</strong></summary>
+
+Keep header rows visible while scrolling through large CSV files.
+
+#### Header Auto-Detection (Recommended)
+
+The plugin automatically detects header rows by analyzing file content:
+
+```lua
+-- Default configuration with auto-detection
+{
+  view = {
+    header_lnum = true,  -- Auto-detect header (default)
+    sticky_header = {
+      enabled = true,
+      separator = "─",  -- Separator line character
+    },
+  },
+}
+```
+
+**How header auto-detection works:**
+
+1. Find the first non-comment line as header candidate
+2. Analyze each column independently using two heuristics:
+   - **Type Mismatch**: If the first row contains text while data rows are numeric, it's likely a header
+   - **Length Deviation**: If the first row's text length differs significantly from data rows, it's likely a header
+3. Combine evidence from all columns to make the final decision
+
+#### Manual Header Configuration
+
+**Fixed header line:**
+
+```lua
+{
+  view = {
+    header_lnum = 1,  -- Use line 1 as header
+    -- header_lnum = 3,  -- Use line 3 as header
+  },
+}
+```
+
+**Disable header:**
+
+```lua
+{
+  view = {
+    header_lnum = false,  -- No header line
+  },
+}
+```
+
+#### Command-line usage
+
+```vim
+:CsvViewEnable header_lnum=auto  " Auto-detect header (default)
+:CsvViewEnable header_lnum=1     " First line as header
+:CsvViewEnable header_lnum=none  " No header line
+```
+
+#### Customize Separator
+
+```lua
+{
+  view = {
+    sticky_header = {
+      separator = "═",     -- Double line
+      -- separator = false, -- No separator
+    },
+  },
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Navigation & Text Objects</strong></summary>
+
+#### Excel-like Navigation
+
+Navigate between fields and rows with familiar keyboard shortcuts:
+
+```lua
+{
+  keymaps = {
+    -- Horizontal navigation
+    jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
+    jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
+    
+    -- Vertical navigation  
+    jump_next_row = { "<Enter>", mode = { "n", "v" } },
+    jump_prev_row = { "<S-Enter>", mode = { "n", "v" } },
+  },
+}
+```
+
+#### Text Objects for Field Selection
+
+```lua
+{
+  keymaps = {
+    -- Select field content (inner)
+    textobject_field_inner = { "if", mode = { "o", "x" } },
+    
+    -- Select field including delimiter (outer)  
+    textobject_field_outer = { "af", mode = { "o", "x" } },
+  },
+}
+```
+
+**Usage examples:**
+
+- `vif` - Select current field content
+- `vaf` - Select current field including delimiter
+- `dif` - Delete field content
+- `caf` - Change entire field
+
+#### Custom Navigation
+
+```lua
+-- Jump to specific field position
 require("csvview.jump").field(0, {
-  pos = { 1, 2 },      -- Move to row=1, column=2
-  mode = "absolute",   -- "absolute": interpret `pos` as absolute coords.
-                       -- "relative": interpret `pos` as offset from the current field.
-  anchor = "start",    -- "start": place the cursor at field start, "end" : field end.
-  col_wrap = true,     -- Wrap to the next/previous row when exceeding column bounds.
+  pos = { 2, 3 },      -- Row 2, Column 3
+  mode = "absolute",
+  anchor = "start",    -- Place cursor at field start
 })
 ```
 
-Shortcuts for common movements:
+</details>
+
+<details>
+<summary><strong>Quote Character Configuration</strong></summary>
+
+Handle quoted fields that contain delimiters or special characters.
+
+#### Basic Quote Configuration
 
 ```lua
--- Jump to the start of the next field like `w` motion.
-require("csvview.jump").next_field_start(bufnr?)
--- Jump to the start of the previous field like `b` motion.
-require("csvview.jump").prev_field_start(bufnr?)
--- Jump to the end of the next field like `e` motion.
-require("csvview.jump").next_field_end(bufnr?)
--- Jump to the end of the previous field like `ge` motion.
-require("csvview.jump").prev_field_end(bufnr?)
+{
+  parser = {
+    quote_char = '"',   -- Standard double quotes (default)
+    -- quote_char = "'", -- Single quotes
+  },
+}
 ```
 
-#### Text Objects
+#### How Quoted Fields Work
 
-For selecting a CSV field via text objects:
+When a field is enclosed in quote characters, the delimiter inside is ignored:
 
-```lua
-require("csvview.textobject").field(0, {
-  include_delimiter = false -- Include the delimiter in the selection
-})
+```csv
+name,description,value
+John,"Smith, Jr.",100
+Jane,"O'Connor ""Jane""",200
 ```
 
-#### Cursor Information
+In this example:
 
-Retrieve detailed information about the cursor position:
+- `"Smith, Jr."` contains a comma but is treated as one field
+- `"O'Connor ""Jane"""` contains escaped quotes within the field
 
-  ```lua
-  local info = require("csvview.util").get_cursor(bufnr)
+#### Command-line Usage
 
-  -- info returns:
-  -- {
-  --   kind   = "field" | "comment" | "empty_line",
-  --   pos    = { 1, 2 },    -- 1-based [row, col] csv coordinates
-  --   anchor = "start" | "end" | "inside" | "delimiter", -- The position of the cursor in the field
-  --   text   = "the field content"
-  -- }
-  ```
+```vim
+" Use double quotes (default)
+:CsvViewEnable quote_char="
 
-## Events
+" Use single quotes
+:CsvViewEnable quote_char='
 
-This plugin provides the following events:
+" Disable quote handling (not recommended)
+:CsvViewEnable quote_char=
+```
 
-| Event            | Description                                                                 |
-|------------------|-----------------------------------------------------------------------------|
-| CsvViewAttach    | Triggered after the initial metrics calculation is completed and the CsvView is attached. |
-| CsvViewDetach    | Triggered after the CsvView is detached.                                    |
+#### Multi-line Field Support
 
-### Example
+Quoted fields can span multiple lines:
 
-You can hook into these events as follows:
+```csv
+id,description
+1,"This is a long
+description that spans
+multiple lines"
+2,"Another field"
+```
+
+Configure the parser for multi-line fields:
 
 ```lua
+{
+  parser = {
+    max_lookahead = 50,  -- Maximum lines to search for closing quotes
+  },
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Multi-line Field Configuration</strong></summary>
+
+Handle CSV fields that span multiple lines when properly quoted.
+
+#### Basic Configuration
+
+```lua
+{
+  parser = {
+    max_lookahead = 50,  -- Maximum lines to search for closing quotes
+  },
+}
+```
+
+#### How Multi-line Fields Work
+
+When a field starts with a quote character but doesn't end on the same line, the parser will search ahead for the closing quote:
+
+```csv
+id,description,notes
+1,"This field contains
+multiple lines of text
+with embedded newlines",Short note
+2,"Another multi-line field
+that spans several lines",Another note
+```
+
+**Adjust `max_lookahead` based on your data:**
+
+- Increase for files with long multi-line fields (e.g., `max_lookahead = 200`)
+- Decrease for simple CSV files to improve performance (e.g., `max_lookahead = 10`)
+
+</details>
+
+<details>
+<summary><strong>Comment Line Handling</strong></summary>
+
+Skip comment lines from the table display to focus on data rows.
+
+#### Basic Comment Configuration
+
+```lua
+{
+  parser = {
+    comments = { "#", "//", "--" },  -- Lines starting with these are ignored
+  },
+}
+```
+
+#### Comment Examples
+
+```csv
+# This is a comment line
+// Another comment style
+-- SQL-style comment
+name,age,city
+John,25,NYC
+# Comments can appear anywhere
+Jane,30,LA
+```
+
+Only the data rows (`name,age,city`, `John,25,NYC`, `Jane,30,LA`) will be displayed in the table format.
+
+#### Command-line Usage
+
+```vim
+" Enable hash comments
+:CsvViewEnable comment=#
+
+" Enable C++ style comments  
+:CsvViewEnable comment=//
+
+" Enable SQL style comments
+:CsvViewEnable comment=--
+
+" Multiple comment types (requires Lua configuration)
+```
+
+#### Advanced Comment Configuration
+
+```lua
+{
+  parser = {
+    comments = {
+      "#",        -- Shell/Python style
+      "//",       -- C++ style  
+      "--",       -- SQL style
+      ";;",       -- Custom comment prefix
+    },
+  },
+}
+```
+
+#### Use Cases
+
+- **Data files with metadata**: Skip header comments explaining the data format
+- **Generated CSV files**: Ignore generator information or timestamps  
+- **Configuration files**: Skip documentation lines in CSV-like config files
+- **Log analysis**: Focus on data rows while ignoring log headers
+
+</details>
+
+## 🌈 Highlights
+
+The plugin uses the following highlight groups for customizing colors and appearance:
+
+| Group                            | Default                    | Purpose                          |
+|----------------------------------|----------------------------|----------------------------------|
+| `CsvViewDelimiter`               | links to `Comment`         | Delimiter highlighting           |
+| `CsvViewComment`                 | links to `Comment`         | Comment line highlighting        |
+| `CsvViewStickyHeaderSeparator`   | links to `CsvViewDelimiter`| Sticky header separator          |
+| `CsvViewHeaderLine`              | -                          | Header line highlighting         |
+| `CsvViewCol0` to `CsvViewCol8`   | links to `csvCol0`-`csvCol8`| Column-based highlighting       |
+
+## 🎭 Events
+
+This plugin provides custom events that you can hook into for advanced integrations and automation.
+
+### Available Events
+
+| Event            | When Triggered                              | Data              |
+|------------------|---------------------------------------------|-------------------|
+| `CsvViewAttach`  | CSV view enabled and metrics calculated     | `bufnr` (number)  |
+| `CsvViewDetach`  | CSV view disabled                           | `bufnr` (number)  |
+
+### Basic Event Usage
+
+```lua
+-- Simple event logging
 local group = vim.api.nvim_create_augroup("CsvViewEvents", {})
+
 vim.api.nvim_create_autocmd("User", {
   pattern = "CsvViewAttach",
   group = group,
   callback = function(args)
     local bufnr = tonumber(args.data)
-    print("CsvView is attached", bufnr)
+    print("CSV view enabled for buffer", bufnr)
+  end,
+})
+
+vim.api.nvim_create_autocmd("User", {
+  pattern = "CsvViewDetach", 
+  group = group,
+  callback = function(args)
+    local bufnr = tonumber(args.data)
+    print("CSV view disabled for buffer", bufnr)
   end,
 })
 ```
 
-## 🌈 Highlights
+### Lua API Reference
 
-| Group                            | Default                    | Description                      |
-| -------------------------------- | -------------------------- | -------------------------------- |
-| **CsvViewDelimiter**             | link to `Comment`          | used for `,`                     |
-| **CsvViewComment**               | link to `Comment`          | used for comment                 |
-| **CsvViewStickyHeaderSeparator** | link to `CsvViewDelimiter` | used for sticky header separator |
-| **CsvViewHeaderLine**            | -                          | used for header highlighting     |
-| **CsvViewCol0** to **CsvViewCol8**| link to `csvCol0` to `csvCol8` | used for field highlighting   |
+<details>
+<summary><strong>Core Functions</strong></summary>
+
+```lua
+local csvview = require('csvview')
+
+-- Buffer management
+csvview.enable(bufnr?, opts?)    -- Enable for specific buffer
+csvview.disable(bufnr?)          -- Disable for specific buffer
+csvview.toggle(bufnr?, opts?)    -- Toggle with options
+csvview.is_enabled(bufnr?)       -- Check status
+```
+
+</details>
+
+<details>
+<summary><strong>Jump API</strong></summary>
+
+```lua
+local jump = require("csvview.jump")
+
+-- Precise field navigation
+jump.field(bufnr, {
+  pos = { row, col },           -- Target position (1-based)
+  mode = "absolute",            -- "absolute" or "relative" 
+  anchor = "start",             -- "start" or "end"
+  col_wrap = true,              -- Wrap at row boundaries
+})
+
+-- Convenience functions
+jump.next_field_start(bufnr?)   -- Like 'w' motion
+jump.prev_field_start(bufnr?)   -- Like 'b' motion  
+jump.next_field_end(bufnr?)     -- Like 'e' motion
+jump.prev_field_end(bufnr?)     -- Like 'ge' motion
+```
+
+</details>
+
+<details>
+<summary><strong>Text Object API</strong></summary>
+
+```lua
+local textobj = require("csvview.textobject")
+
+-- Select current field
+textobj.field(bufnr, {
+  include_delimiter = false,    -- Include surrounding delimiter
+})
+```
+
+</details>
+
+<details>
+<summary><strong>Utility Functions</strong></summary>
+
+```lua
+local util = require("csvview.util")
+
+-- Get detailed cursor information
+local info = util.get_cursor(bufnr)
+-- Returns:
+-- {
+--   kind = "field" | "comment" | "empty_line",
+--   pos = { row, col },        -- 1-based CSV coordinates
+--   anchor = "start" | "end" | "inside" | "delimiter",
+--   text = "field content"
+-- }
+```
+
+</details>
 
 ## 📝 TODO
 

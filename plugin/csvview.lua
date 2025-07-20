@@ -40,12 +40,15 @@ local cmdline = Cmdline:new({
     ---@param options CsvView.Options
     ---@param value string
     set = function(options, value)
-      if value == "false" then
+      if value == "false" or value == "none" then
         options.view.header_lnum = false
+      elseif value == "true" or value == "auto" then
+        options.view.header_lnum = true
       else
         options.view.header_lnum = tonumber(value)
       end
     end,
+    candidates = { "none", "auto", "" },
   },
 })
 
