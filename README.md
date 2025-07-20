@@ -265,7 +265,10 @@ lua require('csvview').setup()
 ## 📋 Feature Guide
 
 <details>
-<summary><strong>Display Configuration</strong></summary>
+<summary>
+
+### Display Configuration
+</summary>
 
 #### Display Modes
 
@@ -314,7 +317,10 @@ Replaces delimiters with vertical borders (`│`):
 </details>
 
 <details>
-<summary><strong>Delimiter Configuration & Auto-Detection</strong></summary>
+<summary>
+
+### Delimiter Configuration & Auto-Detection
+</summary>
 
 csvview.nvim provides flexible delimiter handling with intelligent auto-detection capabilities.
 
@@ -399,7 +405,10 @@ The plugin automatically detects the most appropriate delimiter by analyzing you
 </details>
 
 <details>
-<summary><strong>Sticky Header & Header Auto-Detection</strong></summary>
+<summary>
+
+### Sticky Header & Header Auto-Detection
+</summary>
 
 Keep header rows visible while scrolling through large CSV files.
 
@@ -475,7 +484,10 @@ The plugin automatically detects header rows by analyzing file content:
 </details>
 
 <details>
-<summary><strong>Navigation & Text Objects</strong></summary>
+<summary>
+
+### Navigation & Text Objects
+</summary>
 
 #### Excel-like Navigation
 
@@ -530,7 +542,10 @@ require("csvview.jump").field(0, {
 </details>
 
 <details>
-<summary><strong>Quote Character Configuration</strong></summary>
+<summary>
+
+### Quote Character Configuration
+</summary>
 
 Handle quoted fields that contain delimiters or special characters.
 
@@ -576,7 +591,10 @@ In this example:
 </details>
 
 <details>
-<summary><strong>Multi-line Field Configuration</strong></summary>
+<summary>
+
+### Multi-line Field Configuration
+</summary>
 
 Handle CSV fields that span multiple lines when properly quoted.
 
@@ -611,7 +629,10 @@ that spans several lines",Another note
 </details>
 
 <details>
-<summary><strong>Comment Line Handling</strong></summary>
+<summary>
+
+### Comment Line Handling
+</summary>
 
 Skip comment lines from the table display to focus on data rows.
 
@@ -707,7 +728,10 @@ vim.api.nvim_create_autocmd("User", {
 ### Lua API Reference
 
 <details>
-<summary><strong>Core Functions</strong></summary>
+<summary>
+
+#### Core Functions
+</summary>
 
 ```lua
 local csvview = require('csvview')
@@ -722,7 +746,10 @@ csvview.is_enabled(bufnr?)       -- Check status
 </details>
 
 <details>
-<summary><strong>Jump API</strong></summary>
+<summary>
+
+#### Jump API
+</summary>
 
 ```lua
 local jump = require("csvview.jump")
@@ -745,7 +772,10 @@ jump.prev_field_end(bufnr?)     -- Like 'ge' motion
 </details>
 
 <details>
-<summary><strong>Text Object API</strong></summary>
+<summary>
+
+#### Text Object API
+</summary>
 
 ```lua
 local textobj = require("csvview.textobject")
@@ -759,7 +789,10 @@ textobj.field(bufnr, {
 </details>
 
 <details>
-<summary><strong>Utility Functions</strong></summary>
+<summary>
+
+#### Utility Functions
+</summary>
 
 ```lua
 local util = require("csvview.util")
