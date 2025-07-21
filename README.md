@@ -8,15 +8,13 @@ A comfortable CSV/TSV editing plugin for Neovim.
 
 ## ✨ Features
 
-- **Tabular Display**: Displays CSV/TSV files in a virtual text table.
-- **Dynamic Updates**: Automatically refreshes the table as you edit.
-- **Asynchronous Parsing**: Smoothly handles large CSV files without blocking.
-- **Text Objects & Motions**: Conveniently select fields or move across fields/rows.
-- **Comment Ignoring**: Skips specified comment lines from the table display.
-- **Sticky Header**: Keeps the header row visible while scrolling.
-- **Auto-Detection**: Automatically detects delimiters and headers based on file content.
-- **Flexible Settings**: Customizable delimiter and comment prefix.
-- **Two Display Modes**:
+- Tabular display using virtual text
+- Dynamic updates using asynchronous parsing
+- Comment Line Handling
+- Sticky Headers
+- Auto-Detection of Delimiters and Headers
+- Text Objects & Motions
+- Two Display Modes:
   - `highlight`: Highlights delimiters.
   - `border`: Uses a vertical border (`│`) as delimiters.
 
