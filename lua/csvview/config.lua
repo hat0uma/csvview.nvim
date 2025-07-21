@@ -287,11 +287,29 @@ M._highlights = {
   { name = "CsvViewCol8", link = "csvCol8" },
 }
 
+--- Merge two configuration tables.
+---@param internal CsvView.InternalOptions
+---@param user CsvView.Options
+---@return CsvView.InternalOptions
+local function merge_config(internal, user)
+  local config = vim.tbl_deep_extend("force", internal, user)
+
+  -- Do not merge delimiter.ft, prioritize user settings
+  -- This considers cases like disabling the default ft mappings for csv and tsv.
+  if user.parser and type(user.parser.delimiter) == "table" then
+    if type(user.parser.delimiter.ft) == "table" then
+      config.parser.delimiter.ft = vim.deepcopy(user.parser.delimiter.ft)
+    end
+  end
+
+  return config
+end
+
 --- get config
 ---@param opts? CsvView.Options
 ---@return CsvView.InternalOptions
 function M.get(opts)
-  return vim.tbl_deep_extend("force", M.options, opts or {})
+  return merge_config(M.options, opts or {})
 end
 
 --- setup
@@ -322,7 +340,7 @@ function M.setup(opts)
     end
   end
 
-  M.options = vim.tbl_deep_extend("force", M.defaults, opts or {})
+  M.options = merge_config(M.defaults, opts or {})
 end
 
 return M
