@@ -30,11 +30,15 @@ function M.enable(bufnr, opts)
     return
   end
 
+  local quote_char = util.resolve_quote_char(bufnr, opts)
+  local delimiter = util.resolve_delimiter(bufnr, opts, quote_char)
+  local header_lnum = util.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
+
   -- Create a new CsvView instance
   local on_detach --- @type fun()
-  local parser = CsvViewParser:new(bufnr, opts)
+  local parser = CsvViewParser:new(bufnr, opts, quote_char, delimiter)
   local metrics = CsvViewMetrics:new(bufnr, opts, parser)
-  local view = CsvView:new(bufnr, metrics, opts, function() -- on detach
+  local view = CsvView:new(bufnr, metrics, opts, header_lnum, function() -- on detach
     on_detach()
   end)
 

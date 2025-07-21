@@ -45,7 +45,7 @@ describe("sticky_header", function()
     {
       name = "does not show when the header line is not set",
       winview = { lnum = 100, col = 0 },
-      opts = { view = { sticky_header = { enabled = true, separator = "-" } } },
+      opts = { view = { sticky_header = { enabled = true, separator = "-" }, header_lnum = false } },
       assert = should_not_show_sticky_header,
     },
     {

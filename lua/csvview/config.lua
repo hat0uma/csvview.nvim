@@ -6,13 +6,13 @@ local M = {}
 ---@field quote_char? string
 ---@field comments? string[]
 ---@field max_lookahead? integer
----@alias CsvView.Options.Parser.Delimiter string | {default: string, ft: table<string,string>} | fun(bufnr:integer): string
+---@alias CsvView.Options.Parser.Delimiter string | {ft: table<string,string>, fallbacks: string[]}| fun(bufnr:integer): string
 
 ---@class CsvView.Options.View
 ---@field min_column_width? integer
 ---@field spacing? integer
 ---@field display_mode? CsvView.Options.View.DisplayMode
----@field header_lnum? integer|false
+---@field header_lnum? integer|false|true
 ---@field sticky_header? CsvView.Options.View.StickyHeader
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
 
@@ -49,23 +49,36 @@ M.defaults = {
     --- @type integer
     async_chunksize = 50,
 
-    --- The delimiter character
-    --- You can specify a string, a table of delimiter characters for each file type, or a function that returns a delimiter character.
-    --- Currently, only fixed-length strings are supported. Regular expressions such as \s+ are not supported.
-    --- e.g:
-    ---  delimiter = ","
-    ---  delimiter = function(bufnr) return "," end
-    ---  delimiter = {
-    ---    default = ",",
-    ---    ft = {
-    ---      tsv = "\t",
-    ---    },
-    ---  }
+    --- Specifies the delimiter character to separate columns.
+    --- This can be configured in one of three ways:
+    ---
+    --- 1. As a single string for a fixed delimiter.
+    ---    e.g., delimiter = ","
+    ---
+    --- 2. As a function that dynamically returns the delimiter.
+    ---    e.g., delimiter = function(bufnr) return "\t" end
+    ---
+    --- 3. As a table for advanced configuration:
+    ---    - `ft`: Maps filetypes to specific delimiters. This has the highest priority.
+    ---    - `fallbacks`: An ordered list of delimiters to try for automatic detection
+    ---      when no `ft` rule matches. The plugin will test them in sequence and use
+    ---      the first one that highest scores based on the number of fields in each line.
+    ---
+    --- Note: Only fixed-length strings are supported as delimiters.
+    --- Regular expressions (e.g., `\s+`) are not currently supported.
     --- @type CsvView.Options.Parser.Delimiter
     delimiter = {
-      default = ",",
       ft = {
+        csv = ",",
         tsv = "\t",
+      },
+      fallbacks = {
+        ",",
+        "\t",
+        ";",
+        "|",
+        ":",
+        " ",
       },
     },
 
@@ -117,11 +130,23 @@ M.defaults = {
     ---@type CsvView.Options.View.DisplayMode
     display_mode = "highlight",
 
-    --- The line number of the header
-    --- If this is set, the line is treated as a header. and used for sticky header feature.
-    --- see also: `view.sticky_header`
-    --- @type integer|false
-    header_lnum = false,
+    --- The line number of the header row
+    --- Controls which line should be treated as the header for the CSV table.
+    --- This affects both visual styling and the sticky header feature.
+    ---
+    --- Values:
+    --- - `true`: Automatically detect the header line (default)
+    --- - `integer`: Specific line number to use as header (1-based)
+    --- - `false`: No header line, treat all lines as data rows
+    ---
+    --- When a header is defined, it will be:
+    --- - Highlighted with the CsvViewHeaderLine highlight group
+    --- - Used for the sticky header feature if enabled
+    --- - Excluded from normal data processing in some contexts
+    ---
+    --- See also: `view.sticky_header`
+    --- @type integer|false|true
+    header_lnum = true,
 
     --- The sticky header feature settings
     --- If `view.header_lnum` is set, the header line is displayed at the top of the window.

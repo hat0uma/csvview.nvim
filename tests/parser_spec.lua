@@ -2,6 +2,7 @@
 
 local CsvViewParser = require("csvview.parser")
 local config = require("csvview.config")
+local util = require("csvview.util")
 
 --- test cases for the CSV parser
 ---@type {
@@ -483,13 +484,15 @@ describe("CsvViewParser", function()
     it(case.it, function()
       local opts = config.get(case.opts)
       local bufnr = vim.api.nvim_create_buf(false, true)
-      local parser = CsvViewParser:new(bufnr, opts)
+      local quote_char = util.resolve_quote_char(bufnr, opts)
+      local delimiter = util.resolve_delimiter(bufnr, opts, quote_char)
+      local parser = CsvViewParser:new(bufnr, opts, quote_char, delimiter)
 
       vim.api.nvim_buf_set_lines(bufnr, 0, #case.lines, false, case.lines)
 
       local thread = coroutine.running()
       local results = {} ---@type { is_comment: boolean?, fields: CsvView.Parser.FieldInfo[] }[]
-      parser:parse_lines({
+      parser:parse_lines(opts.parser.async_chunksize, {
         on_end = vim.schedule_wrap(function()
           coroutine.resume(thread)
         end),
