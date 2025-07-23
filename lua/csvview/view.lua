@@ -71,6 +71,8 @@ function View:setup_window(winid)
     set_local(winid, "concealcursor", "nvic")
     set_local(winid, "conceallevel", 2)
   end
+
+  set_local(winid, "wrap", false)
 end
 
 --- Lock view rendering
