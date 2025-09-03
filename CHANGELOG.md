@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.0](https://github.com/hat0uma/csvview.nvim/compare/v1.2.0...v1.3.0) (2025-07-23)
+
+
+### Features
+
+* Add support for multi-line fields ([#55](https://github.com/hat0uma/csvview.nvim/issues/55)) ([54425e4](https://github.com/hat0uma/csvview.nvim/commit/54425e47c3bc19e43ef71b7ed3e6b589306b8d48))
+* **parser:** Add automatic delimiter and header detection ([#62](https://github.com/hat0uma/csvview.nvim/issues/62)) ([bfd95ed](https://github.com/hat0uma/csvview.nvim/commit/bfd95ed77f8f96d07197aeebdb9df058615d994e))
+
+
+### Bug Fixes
+
+* **config:** Respect user delimiter.ft configuration completely ([#64](https://github.com/hat0uma/csvview.nvim/issues/64)) ([1057e6c](https://github.com/hat0uma/csvview.nvim/commit/1057e6cb883881577f99c6fa3429620fc459ab5c))
+* **jump:** Just field: handle case when first col is empty ([#57](https://github.com/hat0uma/csvview.nvim/issues/57)) ([6998bd0](https://github.com/hat0uma/csvview.nvim/commit/6998bd0e821ad1fb2dd199dff6a5cc1bbf71d11f))
+* **view:** disable line wrap to prevent cursor jumping in CSV fields ([#66](https://github.com/hat0uma/csvview.nvim/issues/66)) ([22c9450](https://github.com/hat0uma/csvview.nvim/commit/22c9450d19749aa80cc42f0c968cb9dd57726ece))
+* **view:** Improve rendering performance ([#44](https://github.com/hat0uma/csvview.nvim/issues/44)) ([9cc5dcb](https://github.com/hat0uma/csvview.nvim/commit/9cc5dcb060c96517d8c34b74e5b81d58529b3ea2))
+
+
+### Performance Improvements
+
+* **metrics:** Implement row metrics with FFI for improved memory efficiency ([#59](https://github.com/hat0uma/csvview.nvim/issues/59)) ([507f90b](https://github.com/hat0uma/csvview.nvim/commit/507f90b8806ff18940c2d1115fd930cfb9950d93))
+
 ## [1.2.0](https://github.com/hat0uma/csvview.nvim/compare/v1.1.0...v1.2.0) (2025-03-31)
 
 
