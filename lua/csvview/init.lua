@@ -57,7 +57,7 @@ function M.enable(bufnr, opts)
         vim.api.nvim_create_autocmd("CmdlineLeave", {
           callback = function()
             view:unlock()
-            view:clear()
+            vim.b[bufnr].csvview_refresh_requested = true
           end,
           once = true,
         })
@@ -71,8 +71,18 @@ function M.enable(bufnr, opts)
             return
           end
 
+          -- Request view update.
           view:unlock()
-          view:clear()
+          vim.b[bufnr].csvview_refresh_requested = true
+
+          -- To prevent screen flickering during editing, pre-render only the current window range without waiting for redraw timing.
+          -- Since setting extmarks in `nvim_buf_attach` callbacks doesn't render at correct positions, the rendering result at this stage may be incorrect,
+          -- but it will be updated to the correct position at the next redraw timing since we've requested a view update.
+          if vim.api.nvim_win_get_buf(0) == bufnr then
+            local top = vim.fn.line("w0")
+            local bot = vim.fn.line("w$")
+            view:render_lines(top, bot)
+          end
         end)
       end
     end,
@@ -89,6 +99,7 @@ function M.enable(bufnr, opts)
         end
 
         view:unlock()
+        vim.b[bufnr].csvview_refresh_requested = true
       end)
     end,
   })
@@ -170,6 +181,12 @@ function M.setup(opts)
       local view = views.get(bufnr)
       if not view or view:is_locked() then
         return false
+      end
+
+      -- When refresh is requested, redraw the entire view instead of just the diff.
+      if vim.b[bufnr].csvview_refresh_requested then
+        vim.b[bufnr].csvview_refresh_requested = false
+        view:clear()
       end
 
       local ok, err = xpcall(view.render_lines, util.wrap_stacktrace, view, toprow + 1, botrow + 1)
