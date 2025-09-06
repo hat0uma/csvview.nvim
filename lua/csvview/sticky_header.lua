@@ -208,7 +208,7 @@ end
 
 --- Close header window
 ---@param winid integer
-function M.close_if_opened(winid)
+function M.close_header_win_for(winid)
   local header_win = M._sticky_header_wins[winid]
   if not header_win then
     return
@@ -216,7 +216,7 @@ function M.close_if_opened(winid)
 
   -- Close
   if vim.api.nvim_win_is_valid(header_win) then
-    vim.api.nvim_win_close(header_win, true)
+    pcall(vim.api.nvim_win_close, header_win, true)
   end
   M._sticky_header_wins[winid] = nil
 end
@@ -225,6 +225,10 @@ end
 ---@param winid integer csvview attached window
 ---@return string statuscolumn
 function M.statuscolumn(winid)
+  if not vim.api.nvim_win_is_valid(winid) then
+    return ""
+  end
+
   -- Evaluate the status column in the original window and reflect the result in the sticky header window.
   -- This allows correct display of things like relativenumber.
   local statuscolumn = get_statuscolumn_or_default(winid)
@@ -248,7 +252,7 @@ function M.redraw()
       show_sticky_header(winid, view)
       sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.header_lnum)
     else
-      M.close_if_opened(winid)
+      M.close_header_win_for(winid)
     end
   end
 end

@@ -214,7 +214,7 @@ function M.setup(opts)
       event = "WinClosed",
       callback = function(args)
         local winid = assert(tonumber(args.match))
-        sticky_header.close_if_opened(winid)
+        sticky_header.close_header_win_for(winid)
       end,
     },
     { -- Detach view when the buffer is deleted
