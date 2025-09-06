@@ -181,13 +181,13 @@ end
 --- setup
 ---@param opts CsvView.Options?
 function M.setup(opts)
+  -- Set default options
+  config.setup(opts)
+
   if M._setup_done then
     return
   end
   M._setup_done = true
-
-  -- Set default options
-  config.setup(opts)
 
   -- Register view rendering trigger
   local ns = vim.api.nvim_create_namespace("csvview.view")
