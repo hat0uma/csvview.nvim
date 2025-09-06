@@ -10,6 +10,8 @@ local config = require("csvview.config")
 local keymap = require("csvview.keymap")
 local util = require("csvview.util")
 
+M._setup_done = false
+
 --- check if csv table view is enabled
 ---@param bufnr integer
 ---@return boolean
@@ -22,6 +24,10 @@ end
 ---@param bufnr integer?
 ---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
+  if not M._setup_done then
+    M.setup()
+  end
+
   bufnr = util.resolve_bufnr(bufnr)
   opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
@@ -138,6 +144,10 @@ end
 --- disable csv table view
 ---@param bufnr integer?
 function M.disable(bufnr)
+  if not M._setup_done then
+    M.setup()
+  end
+
   bufnr = util.resolve_bufnr(bufnr)
   if not M.is_enabled(bufnr) then
     vim.notify("csvview: not enabled for this buffer.")
@@ -171,6 +181,11 @@ end
 --- setup
 ---@param opts CsvView.Options?
 function M.setup(opts)
+  if M._setup_done then
+    return
+  end
+  M._setup_done = true
+
   -- Set default options
   config.setup(opts)
 
