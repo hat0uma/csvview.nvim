@@ -284,7 +284,8 @@ function M.field(bufnr, opts)
     anchored_col = field.start_col
   else
     anchored_lnum = field.end_row
-    anchored_col = field.end_col - 1
+    local is_empty_field = field.start_row == field.end_row and field.start_col == field.end_col
+    anchored_col = field.end_col - (is_empty_field and 0 or 1)
     if anchored_col < 0 then
       anchored_col = 0
     end
