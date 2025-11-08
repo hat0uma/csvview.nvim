@@ -67,6 +67,9 @@ Install the plugin using your favorite package manager.
 }
 ```
 
+> [!NOTE]
+> For LazyVim users, create a new file (e.g., `lua/plugins/csvview.lua`) and wrap the code block above with `return { ... }`.
+
 ### vim-plug
 
 ```vim
