@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.1](https://github.com/hat0uma/csvview.nvim/compare/v1.3.0...v1.3.1) (2025-11-08)
+
+
+### Bug Fixes
+
+* Allow enable/disable/toggle without explicit `setup` call ([#75](https://github.com/hat0uma/csvview.nvim/issues/75)) ([a74fdee](https://github.com/hat0uma/csvview.nvim/commit/a74fdee6810f17e9baadbfe7d6488f61954e6ac8))
+* **jump:** correct jump to the end of an empty field ([#76](https://github.com/hat0uma/csvview.nvim/issues/76)) ([bbab4c2](https://github.com/hat0uma/csvview.nvim/commit/bbab4c2f808fd8e11ec8dfdd128251aadba566a1))
+* **sticky_header:** Improve window cleanup and error handling ([#73](https://github.com/hat0uma/csvview.nvim/issues/73)) ([0994095](https://github.com/hat0uma/csvview.nvim/commit/09940956f538f074a5813f7949c700536b642e1f))
+* **view:** Prevent screen flickering during CSV editing ([#71](https://github.com/hat0uma/csvview.nvim/issues/71)) ([99b327c](https://github.com/hat0uma/csvview.nvim/commit/99b327ca97cabd242de0f2ddca7fbc7d378b84a7))
+
 ## [1.3.0](https://github.com/hat0uma/csvview.nvim/compare/v1.2.0...v1.3.0) (2025-07-23)
 
 
