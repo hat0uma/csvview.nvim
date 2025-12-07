@@ -652,8 +652,33 @@ function CsvViewMetrics:get_logical_field_by_offet(lnum, offset)
   return col_idx, ranges[col_idx]
 end
 
-----------------------------------------------------
--- Row functions
-----------------------------------------------------
+--- Estimate memory usage of the metrics data
+---@return CsvView.Metrics.Stats
+function CsvViewMetrics:stats()
+  -- Calculate memory
+  -- Most of the sizes are row objects, so count only the rows.
+  local total_field_count = 0
+  local estimate_bytes = 0
+  for i = 1, #self._rows do
+    local row = self._rows[i]
+    if row then
+      total_field_count = total_field_count + row:field_count()
+      estimate_bytes = estimate_bytes + row:estimate_bytes()
+    end
+  end
+
+  local column_count = #self._columns
+  local logical_row_count = assert(self:get_logical_row_idx(#self._rows))
+
+  ---@class CsvView.Metrics.Stats
+  ---@field estimate_bytes integer Total estimated bytes
+  ---@field row_count integer Number of logical rows
+  ---@field column_count integer Number of columns
+  return {
+    estimate_bytes = estimate_bytes,
+    row_count = logical_row_count,
+    column_count = column_count,
+  }
+end
 
 return CsvViewMetrics

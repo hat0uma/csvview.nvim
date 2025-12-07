@@ -180,6 +180,15 @@ function prototype.get_type(row)
   end
 end
 
+-- Get estimate bytes
+--- @param row CsvView.Metrics._RowStruct
+--- @return integer
+function prototype.estimate_bytes(row)
+  local ffi_size = ffi.sizeof(row)
+  local lua_table_overhead = 40 -- metatable
+  return (ffi_size or 0) + lua_table_overhead
+end
+
 -----------------------------------------
 -- Create a new row type
 -----------------------------------------

@@ -337,4 +337,19 @@ function M.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
   return header_lnum
 end
 
+--- Format memory size to human-readable string
+---@param bytes integer
+---@return string
+function M.format_bytes(bytes)
+  if bytes < 1024 then
+    return string.format("%d B", bytes)
+  elseif bytes < 1024 * 1024 then
+    return string.format("%.2f KB", bytes / 1024)
+  elseif bytes < 1024 * 1024 * 1024 then
+    return string.format("%.2f MB", bytes / (1024 * 1024))
+  else
+    return string.format("%.2f GB", bytes / (1024 * 1024 * 1024))
+  end
+end
+
 return M

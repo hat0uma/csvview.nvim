@@ -88,3 +88,10 @@ end, {
     return cmdline:complete(arg_lead, cmd_line, cursor_pos)
   end,
 })
+
+vim.api.nvim_create_user_command("CsvViewStats", function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  csvview.stats(bufnr)
+end, {
+  desc = "[csvview] Show stats of csvview",
+})

@@ -40,6 +40,9 @@ function M.enable(bufnr, opts)
   local delimiter = util.resolve_delimiter(bufnr, opts, quote_char)
   local header_lnum = util.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
 
+  vim.b[bufnr].csvview_quote_char = quote_char
+  vim.b[bufnr].csvview_delimiter = delimiter
+
   -- Create a new CsvView instance
   local on_detach --- @type fun()
   local parser = CsvViewParser:new(bufnr, opts, quote_char, delimiter)
@@ -119,6 +122,8 @@ function M.enable(bufnr, opts)
     keymap.unregister(opts)
     sticky_header.redraw()
     vim.bo[bufnr].syntax = orig_syntax
+    vim.b[bufnr].csvview_quote_char = nil
+    vim.b[bufnr].csvview_delimiter = nil
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
 
@@ -243,6 +248,35 @@ function M.setup(opts)
       end,
     },
   }, group)
+end
+
+--- Show stats
+---@param bufnr integer?
+function M.stats(bufnr)
+  bufnr = util.resolve_bufnr(bufnr)
+  local view = views.get(bufnr)
+  if not view then
+    vim.notify("csvview: not enabled for this buffer.")
+    return
+  end
+
+  local stats = view.metrics:stats()
+  local delimiter_display = vim.b[bufnr].csvview_delimiter
+  if delimiter_display == "\t" then
+    delimiter_display = "\\t (tab)"
+  elseif delimiter_display == " " then
+    delimiter_display = "(space)"
+  end
+
+  local lines = {
+    "csvview Stats",
+    string.format("- Delimiter    : %-11s", delimiter_display),
+    string.format("- Quote char   : %-11s", vim.b[bufnr].csvview_quote_char),
+    string.format("- Rows         : %-11d", stats.row_count),
+    string.format("- Columns      : %-11d", stats.column_count),
+    string.format("- Memory       : %-11s", util.format_bytes(stats.estimate_bytes)),
+  }
+  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "csvview.nvim" })
 end
 
 return M
