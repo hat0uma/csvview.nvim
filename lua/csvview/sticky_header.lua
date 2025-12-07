@@ -214,11 +214,17 @@ function M.close_header_win_for(winid)
     return
   end
 
-  -- Close
-  if vim.api.nvim_win_is_valid(header_win) then
-    pcall(vim.api.nvim_win_close, header_win, true)
-  end
   M._sticky_header_wins[winid] = nil
+  if not vim.api.nvim_win_is_valid(header_win) then
+    return
+  end
+
+  -- Close (use vim.schedule to avoid issues when called during BufUnload)
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(header_win) then
+      pcall(vim.api.nvim_win_close, header_win, true)
+    end
+  end)
 end
 
 --- statuscolumn function for sticky header window.
