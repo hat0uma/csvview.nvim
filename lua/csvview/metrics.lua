@@ -1,11 +1,10 @@
 local nop = function() end
 local ColumnTracker = require("csvview.metrics_column")
-local CsvViewMetricsRow = require("csvview.metrics_row")
-local RowBuilder = require("csvview.metrics_row_builder")
+local Row = require("csvview.metrics_row")
 local RowMapper = require("csvview.metrics_row_mapper")
 
 -----------------------------------------------------------------------------
--- Metrics class (Facade)
+-- Metrics class
 -- Coordinates row storage, column tracking, and line mapping
 -----------------------------------------------------------------------------
 
@@ -180,30 +179,91 @@ end
 ---@param endlnum integer? if present, compute only specified range
 ---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
-  -- Parse specified range and update metrics.
-  self._parser:parse_lines(self._opts.parser.async_chunksize, {
-    on_line = function(lnum, is_comment, fields, parsed_endlnum, terminated)
-      local new_endlnum = nil ---@type integer?
-      local rows = RowBuilder.construct_rows(lnum, is_comment, fields, parsed_endlnum, terminated)
-      assert(#rows == parsed_endlnum - lnum + 1, "Invalid number of rows computed")
+  -- State for building rows from parse events
+  local field_buffer = Row.FieldBuffer:new()
+  local line_field_counts = {} ---@type integer[]
+  local record_start_lnum = 0
 
-      -- Update row metrics and adjust column metrics
-      for i, row in ipairs(rows) do
-        local line = lnum + i - 1
-        local prev_row = self._rows[line]
-        self._rows[line] = row
+  -- Parse using parse_records with event callbacks
+  self._parser:parse_records(self._opts.parser.async_chunksize, {
+    on_comment = function(lnum)
+      local prev_row = self._rows[lnum]
+      local row = Row.new_comment()
+      self._rows[lnum] = row
+      self:_mark_recalculation_on_decrease_fields(lnum, prev_row, row)
+    end,
 
-        if prev_row and prev_row.type == "multiline_start" and row.type == "multiline_continuation" then
+    on_record_start = function(lnum)
+      -- clear record state
+      record_start_lnum = lnum
+      field_buffer:reset()
+      for k in pairs(line_field_counts) do
+        line_field_counts[k] = nil
+      end
+    end,
+
+    on_field = function(_, lnum, line, offset, endpos)
+      local len = endpos - offset -- endpos is 1-based end position, offset is 0-based start
+      local text = string.sub(line, offset + 1, endpos)
+      local display_width = vim.fn.strdisplaywidth(text, offset)
+      local is_number = tonumber(text) ~= nil
+      field_buffer:add(offset, len, display_width, is_number)
+
+      -- field count per lines
+      local rel_idx = lnum - record_start_lnum
+      line_field_counts[rel_idx] = (line_field_counts[rel_idx] or 0) + 1
+    end,
+
+    on_record_end = function(record_start, record_end, terminated)
+      local new_endlnum = nil
+      local is_multiline = record_start ~= record_end
+      local current_skipped = 0
+
+      -- Track buffer offset as we consume fields for each row
+      local current_buffer_offset = 0
+      for lnum = record_start, record_end do
+        local prev_row = self._rows[lnum]
+
+        local rel_idx = lnum - record_start
+        local field_count = line_field_counts[rel_idx] or 0
+        local skipped_ncol = current_skipped
+
+        -- Create appropriate row type
+        local new_row --- @type CsvView.Metrics.Row
+        if not is_multiline then
+          new_row = Row.new_singleline(field_count)
+        elseif lnum == record_start then
+          local endloffset = record_end - record_start
+          new_row = Row.new_multiline_start(field_count, endloffset, terminated)
+        else
+          local start_loffset = lnum - record_start
+          local end_loffset = record_end - lnum
+          new_row = Row.new_multiline_continuation(field_count, start_loffset, end_loffset, skipped_ncol, terminated)
+        end
+
+        -- Copy fields from buffer to row
+        field_buffer:copy_to_row(new_row, current_buffer_offset, field_count)
+        current_buffer_offset = current_buffer_offset + field_count
+
+        -- update skipped count
+        if field_count > 0 then
+          current_skipped = current_skipped + (field_count - 1)
+        end
+
+        self._rows[lnum] = new_row
+        if prev_row and prev_row.type == "multiline_start" and new_row.type == "multiline_continuation" then
           -- If the structure of the multi-line field is broken, it affects all subsequent rows,
           -- so all rows need to be recalculated.
           new_endlnum = vim.api.nvim_buf_line_count(self._bufnr) - 1
         end
 
-        self:_mark_recalculation_on_decrease_fields(line, prev_row, row)
-        self:_update_column_metrics_for_row(line)
+        self:_mark_recalculation_on_decrease_fields(lnum, prev_row, new_row)
+        self:_update_column_metrics_for_row(lnum)
       end
+
       return new_endlnum
     end,
+
     on_end = function(err)
       if err then
         on_end(err)
@@ -212,7 +272,6 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
 
       -- Recalculate dirty columns
       self._columns:recalculate_dirty()
-
       on_end()
     end,
   }, startlnum, endlnum, self._current_parse)
@@ -302,7 +361,7 @@ function CsvViewMetrics:_add_row_placeholders(start, num)
     self._rows[i + num] = self._rows[i]
   end
   for i = start, start + num - 1 do
-    self._rows[i] = CsvViewMetricsRow.new_single_row({})
+    self._rows[i] = Row.new_singleline(0)
   end
 end
 
@@ -324,10 +383,6 @@ function CsvViewMetrics:_remove_rows(start, num)
     self._rows[i + num] = nil
   end
 end
-
------------------------------------------------------------------------------
--- Mapping API (delegated to RowMapper)
------------------------------------------------------------------------------
 
 --- Find the start of the logical row containing the given physical line number
 ---@param lnum integer physical line number

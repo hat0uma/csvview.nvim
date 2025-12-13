@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-local CsvViewMetricsRow = {}
+local M = {}
 
 --- @class CsvView.Metrics.Field: ffi.cdata*
 --- @field offset integer
@@ -180,6 +180,19 @@ function prototype.get_type(row)
   end
 end
 
+--- Set field data at the specified index
+---@param row CsvView.Metrics._RowStruct
+---@param index integer 1-based index
+---@param text string
+---@param offset integer
+function prototype.set_field(row, index, text, offset)
+  local field = row._fields[index - 1] ---@type CsvView.Metrics.Field
+  field.offset = offset
+  field.len = #text
+  field.display_width = vim.fn.strdisplaywidth(text)
+  field.is_number = tonumber(text) ~= nil
+end
+
 -----------------------------------------
 -- Create a new row type
 -----------------------------------------
@@ -188,7 +201,7 @@ local csvview_row_t = ffi.metatype("csvview_row_t", mt)
 
 --- Create a new comment row
 ---@return CsvView.Metrics.CommentRow
-function CsvViewMetricsRow.new_comment_row()
+function M.new_comment()
   ---@diagnostic disable-next-line: assign-type-mismatch
   local row = csvview_row_t(0) ---@type CsvView.Metrics.CommentRow
   row._type = ROW_TYPE.COMMENT
@@ -197,81 +210,123 @@ function CsvViewMetricsRow.new_comment_row()
 end
 
 --- Create a new single line row
----@param fields CsvView.Metrics.Field[]
+---@param field_count integer
 ---@return CsvView.Metrics.SinglelineRow
-function CsvViewMetricsRow.new_single_row(fields)
-  local field_count = #fields
-
+function M.new_singleline(field_count)
   ---@diagnostic disable-next-line: assign-type-mismatch
   local row = csvview_row_t(field_count) ---@type CsvView.Metrics.SinglelineRow
   row._type = ROW_TYPE.SINGLELINE
-
   row._field_count = field_count
-  for i, field_info in ipairs(fields) do
-    local field = row._fields[i - 1] ---@type CsvView.Metrics.Field
-    field.offset = field_info.offset
-    field.len = field_info.len
-    field.display_width = field_info.display_width
-    field.is_number = field_info.is_number
-  end
-
   return row
 end
 
 --- Create a new multiline start row
+---@param field_count integer
 ---@param end_loffset integer
 ---@param terminated boolean
----@param fields CsvView.Metrics.Field[]
 ---@return CsvView.Metrics.MultilineStartRow
-function CsvViewMetricsRow.new_multiline_start_row(end_loffset, terminated, fields)
-  local field_count = #fields
-
+function M.new_multiline_start(field_count, end_loffset, terminated)
   ---@diagnostic disable-next-line: assign-type-mismatch
   local row = csvview_row_t(field_count) ---@type CsvView.Metrics.MultilineStartRow
   row._type = ROW_TYPE.MULTILINE_START
-  row._terminated = terminated and 1 or 0
-  row._end_loffset = end_loffset
-
   row._field_count = field_count
-  for i, field_info in ipairs(fields) do
-    local field = row._fields[i - 1] ---@type CsvView.Metrics.Field
-    field.offset = field_info.offset
-    field.len = field_info.len
-    field.display_width = field_info.display_width
-    field.is_number = field_info.is_number
-  end
-
+  row._end_loffset = end_loffset
+  row._terminated = terminated and 1 or 0
   return row
 end
 
 --- Create a new multiline continuation row
+---@param field_count integer
 ---@param start_loffset integer
 ---@param end_loffset integer
 ---@param skipped_ncol integer
 ---@param terminated boolean
----@param fields CsvView.Metrics.Field[]
 ---@return CsvView.Metrics.MultilineContinuationRow
-function CsvViewMetricsRow.new_multiline_continuation_row(start_loffset, end_loffset, skipped_ncol, terminated, fields)
-  local field_count = #fields
-
-  --- @diagnostic disable-next-line: assign-type-mismatch
+function M.new_multiline_continuation(field_count, start_loffset, end_loffset, skipped_ncol, terminated)
+  ---@diagnostic disable-next-line: assign-type-mismatch
   local row = csvview_row_t(field_count) ---@type CsvView.Metrics.MultilineContinuationRow
   row._type = ROW_TYPE.MULTILINE_CONTINUATION
-  row._terminated = terminated and 1 or 0
+  row._field_count = field_count
   row._start_loffset = start_loffset
   row._end_loffset = end_loffset
   row._skipped_ncol = skipped_ncol
-
-  row._field_count = field_count
-  for i, field_info in ipairs(fields) do
-    local field = row._fields[i - 1] ---@type CsvView.Metrics.Field
-    field.offset = field_info.offset
-    field.len = field_info.len
-    field.display_width = field_info.display_width
-    field.is_number = field_info.is_number
-  end
-
+  row._terminated = terminated and 1 or 0
   return row
 end
 
-return CsvViewMetricsRow
+-----------------------------------------------------------------------------
+-- FieldBuffer: Temporary buffer for parsing
+-----------------------------------------------------------------------------
+
+--- @class CsvView.FieldBuffer
+--- @field private _buffer ffi.cdata* FFI array of csvview_field_t
+--- @field private _capacity integer current buffer capacity
+--- @field private _index integer current write index (0-based)
+local FieldBuffer = {}
+FieldBuffer.__index = FieldBuffer
+
+--- Create a new FieldBuffer
+---@param initial_capacity integer? initial capacity (default: 8192)
+---@return CsvView.FieldBuffer
+function FieldBuffer:new(initial_capacity)
+  initial_capacity = initial_capacity or 8192
+  local obj = setmetatable({}, self)
+  obj._buffer = ffi.new("csvview_field_t[?]", initial_capacity)
+  obj._capacity = initial_capacity
+  obj._index = 0
+  return obj
+end
+
+--- Grow the buffer to accommodate more fields
+---@private
+function FieldBuffer:_grow()
+  local new_capacity = self._capacity * 2
+  local new_buffer = ffi.new("csvview_field_t[?]", new_capacity)
+  ffi.copy(new_buffer, self._buffer, self._index * ffi.sizeof("csvview_field_t"))
+  self._buffer = new_buffer
+  self._capacity = new_capacity
+end
+
+--- Reset the buffer for a new record
+function FieldBuffer:reset()
+  self._index = 0
+end
+
+--- Add a field to the buffer
+---@param offset integer 0-based byte offset
+---@param len integer field length in bytes
+---@param display_width integer display width
+---@param is_number boolean whether the field is a number
+function FieldBuffer:add(offset, len, display_width, is_number)
+  if self._index >= self._capacity then
+    self:_grow()
+  end
+
+  local field = self._buffer[self._index] ---@type CsvView.Metrics.Field
+  field.offset = offset
+  field.len = len
+  field.display_width = display_width
+  field.is_number = is_number
+
+  self._index = self._index + 1
+end
+
+--- Get current field count
+---@return integer
+function FieldBuffer:count()
+  return self._index
+end
+
+--- Copy a slice of fields to a row's _fields array
+---@param row CsvView.Metrics._RowStruct destination row
+---@param start_offset integer 0-based start index in buffer
+---@param field_count integer number of fields to copy
+function FieldBuffer:copy_to_row(row, start_offset, field_count)
+  if field_count > 0 then
+    ffi.copy(row._fields, self._buffer + start_offset, field_count * ffi.sizeof("csvview_field_t"))
+  end
+end
+
+M.FieldBuffer = FieldBuffer
+
+return M

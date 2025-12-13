@@ -70,6 +70,8 @@ function M.enable(bufnr, opts)
       else
         -- Handle normal buffer update events
         view:lock()
+        -- clear line cache before parsing to ensure fresh data
+        parser:invalidate_cache()
         metrics:update(first, last, last_updated, function(err)
           if err and err ~= "cancelled" then
             vim.notify("csvview: failed to update metrics: " .. err, vim.log.levels.ERROR)
