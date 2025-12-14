@@ -1,3 +1,4 @@
+local strings = require("csvview.strings")
 local nop = function() end
 local ColumnTracker = require("csvview.metrics_column")
 local Row = require("csvview.metrics_row")
@@ -204,9 +205,8 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
 
     on_field = function(_, lnum, line, offset, endpos)
       local len = endpos - offset -- endpos is 1-based end position, offset is 0-based start
-      local text = string.sub(line, offset + 1, endpos)
-      local display_width = vim.fn.strdisplaywidth(text, offset)
-      local is_number = tonumber(text) ~= nil
+      local display_width = strings.display_width(line, offset, endpos)
+      local is_number = strings.is_number(line, offset, endpos)
       field_buffer:add(offset, len, display_width, is_number)
 
       -- field count per lines
