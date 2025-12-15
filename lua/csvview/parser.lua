@@ -308,6 +308,9 @@ function CsvViewParser:parse_record(lnum, events)
   events.record_end(lnum, current_lnum, terminated)
 end
 
+--- Create a field collector for convenience APIs.
+--- NOTE: This collector extracts field text via string.sub, which has allocation overhead.
+--- For performance-critical paths, use parse_records() with event callbacks directly.
 local function create_field_collector()
   local fields = {} ---@type CsvView.Parser.FieldInfo[]
   local current_field = nil ---@type CsvView.Parser.FieldInfo?
@@ -350,7 +353,9 @@ local function create_field_collector()
   end
 end
 
---- Parse a single line and return field info table
+--- Parse a single line and return field info table.
+--- NOTE: This is a convenience API for testing and simple use cases.
+--- For performance-critical paths, use parse_records() with event callbacks directly.
 ---@param lnum integer
 ---@return boolean is_comment
 ---@return CsvView.Parser.FieldInfo[] fields
