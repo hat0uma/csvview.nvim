@@ -110,6 +110,20 @@ local cases = {
     },
   },
   {
+    it = "should parse line with quoted comma2",
+    lines = { 'abc,de,"f,g"' },
+    expected = {
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "abc" },
+          { start_pos = 5, text = "de" },
+          { start_pos = 8, text = '"f,g"' },
+        },
+      },
+    },
+  },
+  {
     it = "should parse line with missing closing quotes",
     lines = { 'abc,de,"f,g,h' },
     expected = {
@@ -490,20 +504,26 @@ describe("CsvViewParser", function()
 
       vim.api.nvim_buf_set_lines(bufnr, 0, #case.lines, false, case.lines)
 
-      local thread = coroutine.running()
       local results = {} ---@type { is_comment: boolean?, fields: CsvView.Parser.FieldInfo[] }[]
-      parser:parse_lines(opts.parser.async_chunksize, {
-        on_end = vim.schedule_wrap(function()
-          coroutine.resume(thread)
-        end),
-        on_line = function(lnum, is_comment, fields)
-          table.insert(results, { is_comment = is_comment, fields = fields })
-        end,
-      }, case.startlnum, case.endlnum)
+      local startlnum = case.startlnum or 1
+      local endlnum = case.endlnum or #case.lines
+      local lnum = startlnum
 
-      coroutine.yield()
+      while lnum <= endlnum do
+        local is_comment, fields, parse_endlnum = parser:parse_line(lnum)
+        table.insert(results, { is_comment = is_comment, fields = fields })
+        lnum = parse_endlnum + 1
+      end
+
       vim.api.nvim_buf_delete(bufnr, { force = true })
-      assert.are.same(#case.expected, #results)
+      assert.are.same(
+        #case.expected,
+        #results,
+        vim.inspect({
+          expected = case.expected,
+          result = results,
+        })
+      )
       for i = 1, #results do
         assert.are.same(case.expected[i].is_comment, results[i].is_comment)
         assert.are.same(case.expected[i].fields, results[i].fields)
