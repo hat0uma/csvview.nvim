@@ -5,6 +5,7 @@ local M = {}
 ---@field delimiter? CsvView.Options.Parser.Delimiter
 ---@field quote_char? string
 ---@field comments? string[]
+---@field comment_lines? integer
 ---@field max_lookahead? integer
 ---@alias CsvView.Options.Parser.Delimiter string | {ft: table<string,string>, fallbacks: string[]}| fun(bufnr:integer): string
 
@@ -104,6 +105,15 @@ M.defaults = {
       -- "--",
       -- "//",
     },
+
+    --- The number of lines at the beginning of the file to treat as comments.
+    --- Lines from 1 to this number will be treated as comment lines regardless of their content.
+    --- This is useful for files that have a fixed header/metadata section at the top.
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable comment_lines=2
+    --- @type integer?
+    comment_lines = nil,
 
     --- Maximum lookahead for multi-line fields
     --- This limits how many lines ahead the parser will look when trying to find

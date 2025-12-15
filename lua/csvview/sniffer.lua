@@ -19,11 +19,11 @@ end
 ---@param sample_lines string[] Sample lines to use instead of the buffer
 ---@param delimiter string The delimiter character
 ---@param quote_char string The quote character
----@param comments string[] Comments to ignores
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return CsvView.Parser parser The parser instance
-local function create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
-  return require("csvview.parser"):new_with_source(quote_char:byte(), delimiter, comments, max_lookahead, {
+local function create_parser(sample_lines, delimiter, quote_char, comment, max_lookahead)
+  return require("csvview.parser"):new_with_source(quote_char:byte(), delimiter, comment, max_lookahead, {
     get_line = function(lnum)
       return sample_lines[lnum]
     end,
@@ -37,12 +37,12 @@ end
 ---@param sample_lines string[] Sample lines to analyze
 ---@param delimiter string The delimiter character
 ---@param quote_char string The quote character
----@param comments string[] Comments to ignore
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return number score Consistency score (0-1, higher is better)
-function M._calculate_consistency_score(sample_lines, delimiter, quote_char, comments, max_lookahead)
+function M._calculate_consistency_score(sample_lines, delimiter, quote_char, comment, max_lookahead)
   local lines_to_check = #sample_lines
-  local parser = create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
+  local parser = create_parser(sample_lines, delimiter, quote_char, comment, max_lookahead)
 
   local field_counts = {} ---@type integer[]
   local total_fields = 0
@@ -149,16 +149,16 @@ end
 ---@param sample_lines string[] Sample lines to analyze
 ---@param delimiters? string[] Possible delimiter characters
 ---@param quote_char string The quote character to use
----@param comments string[] Comments to ignore
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return string delimiter The detected delimiter character
-function M.detect_delimiter(sample_lines, delimiters, quote_char, comments, max_lookahead)
+function M.detect_delimiter(sample_lines, delimiters, quote_char, comment, max_lookahead)
   delimiters = delimiters or DEFAULT_DELIMITERS
   local delimiter_scores = {} ---@type table<string, number> -- Store scores for each delimiter
 
   for _, delimiter in ipairs(delimiters) do
     local consistency_score =
-      M._calculate_consistency_score(sample_lines, delimiter, quote_char, comments, max_lookahead)
+      M._calculate_consistency_score(sample_lines, delimiter, quote_char, comment, max_lookahead)
     delimiter_scores[delimiter] = consistency_score
   end
 
@@ -375,16 +375,16 @@ end
 ---@param sample_lines string[] Sample lines to analyze
 ---@param delimiter string The delimiter character
 ---@param quote_char string The quote character
----@param comments string[] Comments to ignore
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return integer? header_lnum The line number of the header row, if detected
-function M.detect_header(sample_lines, delimiter, quote_char, comments, max_lookahead)
+function M.detect_header(sample_lines, delimiter, quote_char, comment, max_lookahead)
   local line_count = #sample_lines
   if line_count < 2 then
     return nil
   end
 
-  local parser = create_parser(sample_lines, delimiter, quote_char, comments, max_lookahead)
+  local parser = create_parser(sample_lines, delimiter, quote_char, comment, max_lookahead)
 
   -- Find the first non-comment line as a header candidate
   local first_valid_lnum ---@type integer?
@@ -469,15 +469,15 @@ end
 --- Detects the delimiter for a buffer by sampling lines
 ---@param bufnr integer Buffer number to analyze
 ---@param quote_char string Quote character to use
----@param comments string[] Comments to ignore
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@param candidates string[]? Possible delimiters to check
 ---@param n_samples integer? Number of lines to sample
 ---@return string delimiter The detected delimiter character
-function M.buf_detect_delimiter(bufnr, quote_char, comments, max_lookahead, candidates, n_samples)
+function M.buf_detect_delimiter(bufnr, quote_char, comment, max_lookahead, candidates, n_samples)
   n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
   local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
-  return M.detect_delimiter(sample_lines, candidates, quote_char, comments, max_lookahead)
+  return M.detect_delimiter(sample_lines, candidates, quote_char, comment, max_lookahead)
 end
 
 --- Detects the quote character for a buffer by sampling lines
@@ -495,14 +495,14 @@ end
 ---@param bufnr integer Buffer number to analyze
 ---@param delimiter string The delimiter character to use
 ---@param quote_char string The quote character to use
----@param comments string[] Comments to ignore
+---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@param n_samples integer? Number of lines to sample
 ---@return integer? header_lnum The line number of the header row, if detected
-function M.buf_detect_header(bufnr, delimiter, quote_char, comments, max_lookahead, n_samples)
+function M.buf_detect_header(bufnr, delimiter, quote_char, comment, max_lookahead, n_samples)
   n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
   local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
-  return M.detect_header(sample_lines, delimiter, quote_char, comments, max_lookahead)
+  return M.detect_header(sample_lines, delimiter, quote_char, comment, max_lookahead)
 end
 
 return M

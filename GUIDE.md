@@ -232,8 +232,8 @@ Navigate between fields and rows with familiar keyboard shortcuts:
     -- Horizontal navigation
     jump_next_field_end = { "<Tab>", mode = { "n", "v" } },
     jump_prev_field_end = { "<S-Tab>", mode = { "n", "v" } },
-    
-    -- Vertical navigation  
+
+    -- Vertical navigation
     jump_next_row = { "<Enter>", mode = { "n", "v" } },
     jump_prev_row = { "<S-Enter>", mode = { "n", "v" } },
   },
@@ -247,8 +247,8 @@ Navigate between fields and rows with familiar keyboard shortcuts:
   keymaps = {
     -- Select field content (inner)
     textobject_field_inner = { "if", mode = { "o", "x" } },
-    
-    -- Select field including delimiter (outer)  
+
+    -- Select field including delimiter (outer)
     textobject_field_outer = { "af", mode = { "o", "x" } },
   },
 }
@@ -377,17 +377,44 @@ Jane,30,LA
 
 Only the data rows (`name,age,city`, `John,25,NYC`, `Jane,30,LA`) will be displayed in the table format.
 
+### Fixed Header Comment Lines
+
+For files with a fixed number of metadata lines at the top, use `comment_lines`:
+
+```lua
+{
+  parser = {
+    comment_lines = 2,  -- First 2 lines are always treated as comments
+  },
+}
+```
+
+This is useful for files like:
+
+```csv
+Generated: 2024-01-15
+Source: database_export
+name,age,city
+John,25,NYC
+Jane,30,LA
+```
+
+The first 2 lines will be treated as comments regardless of their content.
+
 ### Command-line Usage
 
 ```vim
 " Enable hash comments
 :CsvViewEnable comment=#
 
-" Enable C++ style comments  
+" Enable C++ style comments
 :CsvViewEnable comment=//
 
 " Enable SQL style comments
 :CsvViewEnable comment=--
+
+" Treat first N lines as comments
+:CsvViewEnable comment_lines=2
 
 " Multiple comment types (requires Lua configuration)
 ```
@@ -414,14 +441,14 @@ local jump = require("csvview.jump")
 -- Precise field navigation
 jump.field(bufnr, {
   pos = { row, col },           -- Target position (1-based)
-  mode = "absolute",            -- "absolute" or "relative" 
+  mode = "absolute",            -- "absolute" or "relative"
   anchor = "start",             -- "start" or "end"
   col_wrap = true,              -- Wrap at row boundaries
 })
 
 -- Convenience functions
 jump.next_field_start(bufnr?)   -- Like 'w' motion
-jump.prev_field_start(bufnr?)   -- Like 'b' motion  
+jump.prev_field_start(bufnr?)   -- Like 'b' motion
 jump.next_field_end(bufnr?)     -- Like 'e' motion
 jump.prev_field_end(bufnr?)     -- Like 'ge' motion
 ```
@@ -452,4 +479,3 @@ local info = util.get_cursor(bufnr)
 --   text = "field content"
 -- }
 ```
-

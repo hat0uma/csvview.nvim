@@ -27,6 +27,14 @@ local cmdline = Cmdline:new({
     end,
   },
   {
+    name = "comment_lines",
+    ---@param options CsvView.Options
+    ---@param value string
+    set = function(options, value)
+      options.parser.comment_lines = tonumber(value)
+    end,
+  },
+  {
     name = "display_mode",
     ---@param options CsvView.Options
     ---@param value string
