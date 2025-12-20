@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0](https://github.com/hat0uma/csvview.nvim/compare/v1.3.0...v1.4.0) (2025-12-20)
+
+
+### Features
+
+* **parser:** add comment_lines option to skip header metadata lines ([#87](https://github.com/hat0uma/csvview.nvim/issues/87)) ([1f40995](https://github.com/hat0uma/csvview.nvim/commit/1f409951516db0d5babaa1f44842a9a882babdd3))
+
+
+### Bug Fixes
+
+* Allow enable/disable/toggle without explicit `setup` call ([#75](https://github.com/hat0uma/csvview.nvim/issues/75)) ([a74fdee](https://github.com/hat0uma/csvview.nvim/commit/a74fdee6810f17e9baadbfe7d6488f61954e6ac8))
+* **jump:** correct jump to the end of an empty field ([#76](https://github.com/hat0uma/csvview.nvim/issues/76)) ([bbab4c2](https://github.com/hat0uma/csvview.nvim/commit/bbab4c2f808fd8e11ec8dfdd128251aadba566a1))
+* **sticky_header:** Improve window cleanup and error handling ([#73](https://github.com/hat0uma/csvview.nvim/issues/73)) ([0994095](https://github.com/hat0uma/csvview.nvim/commit/09940956f538f074a5813f7949c700536b642e1f))
+* **sticky_header:** use vim.schedule for window close during BufUnload ([#84](https://github.com/hat0uma/csvview.nvim/issues/84)) ([860bd8c](https://github.com/hat0uma/csvview.nvim/commit/860bd8c4edacf709391058e337445217d995dd69))
+* **view:** Prevent screen flickering during CSV editing ([#71](https://github.com/hat0uma/csvview.nvim/issues/71)) ([99b327c](https://github.com/hat0uma/csvview.nvim/commit/99b327ca97cabd242de0f2ddca7fbc7d378b84a7))
+
+
+### Performance Improvements
+
+* **parser,metrics:** parsing with event-based architecture and FFI optimization ([#86](https://github.com/hat0uma/csvview.nvim/issues/86)) ([4c4db58](https://github.com/hat0uma/csvview.nvim/commit/4c4db582c5406b5cfaded6303cb120dc27cf6b70))
+
 ## [1.3.0](https://github.com/hat0uma/csvview.nvim/compare/v1.2.0...v1.3.0) (2025-07-23)
 
 
