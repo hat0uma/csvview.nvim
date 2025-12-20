@@ -150,6 +150,15 @@ lua require('csvview').setup()
       -- "//",
     },
 
+    --- The number of lines at the beginning of the file to treat as comments.
+    --- Lines from 1 to this number will be treated as comment lines regardless of their content.
+    --- This is useful for files that have a fixed header/metadata section at the top.
+    --- You can also specify it on the command line.
+    --- e.g:
+    --- :CsvViewEnable comment_lines=2
+    --- @type integer?
+    comment_lines = nil,
+
     --- Maximum lookahead for multi-line fields
     --- This limits how many lines ahead the parser will look when trying to find 
     --- the closing quote of a multi-line field. Setting this too high may cause

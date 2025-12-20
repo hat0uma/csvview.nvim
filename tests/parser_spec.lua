@@ -269,6 +269,83 @@ local cases = {
     },
   },
   {
+    it = "should treat first N lines as comments with comment_lines option",
+    opts = { parser = { comment_lines = 2, comments = {} } },
+    lines = {
+      "File: test.csv",
+      "Date: 2024-01-01",
+      "name,age,city",
+      "John,25,New York",
+    },
+    expected = {
+      {
+        is_comment = true,
+        fields = {},
+      },
+      {
+        is_comment = true,
+        fields = {},
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "name" },
+          { start_pos = 6, text = "age" },
+          { start_pos = 10, text = "city" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "John" },
+          { start_pos = 6, text = "25" },
+          { start_pos = 9, text = "New York" },
+        },
+      },
+    },
+  },
+  {
+    it = "should combine comment_lines and comment prefix detection",
+    opts = { parser = { comment_lines = 2, comments = { "#" } } },
+    lines = {
+      "File: test.csv",
+      "Date: 2024-01-01",
+      "# This is also a comment",
+      "name,age,city",
+      "John,25,New York",
+    },
+    expected = {
+      {
+        is_comment = true,
+        fields = {},
+      },
+      {
+        is_comment = true,
+        fields = {},
+      },
+      {
+        is_comment = true,
+        fields = {},
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "name" },
+          { start_pos = 6, text = "age" },
+          { start_pos = 10, text = "city" },
+        },
+      },
+      {
+        is_comment = false,
+        fields = {
+          { start_pos = 1, text = "John" },
+          { start_pos = 6, text = "25" },
+          { start_pos = 9, text = "New York" },
+        },
+      },
+    },
+  },
+  {
     it = "should parse multi-line quoted fields",
     lines = {
       '"123","This is a',

@@ -139,7 +139,7 @@ end
 ---@field private _quote_char integer
 ---@field private _delim_bytes integer[]
 ---@field private _delim_str string
----@field private _comments string[]
+---@field private _is_comment_line fun(lnum:integer, line:string): boolean
 ---@field private _max_lookahead integer
 ---@field private _source CsvView.Parser.Source
 local CsvViewParser = {}
@@ -152,44 +152,31 @@ CsvViewParser.__index = CsvViewParser
 ---@param delimiter string Delimiter string.
 ---@return CsvView.Parser
 function CsvViewParser:new(bufnr, opts, quote_char, delimiter)
-  local obj = setmetatable({}, self)
-  obj._quote_char = quote_char:byte()
-  obj._delim_bytes = { delimiter:byte(1, #delimiter) }
-  obj._delim_str = delimiter
-  obj._comments = opts.parser.comments
-  obj._max_lookahead = opts.parser.max_lookahead
-  obj._source = new_buffer_source(bufnr, 1000)
-  return obj
+  return CsvViewParser:new_with_source(
+    quote_char:byte(),
+    delimiter,
+    util.create_is_comment(opts),
+    opts.parser.max_lookahead,
+    new_buffer_source(bufnr, 1000)
+  )
 end
 
 --- Create a new CsvView.Parser from lines.
 ---@param quote_char integer Quote character byte.
 ---@param delimiter string Delimiter string.
----@param comments string[] Comment prefixes.
+---@param is_comment fun(lnum:integer, line:string): boolean
 ---@param max_lookahead integer Maximum number of lines to look ahead for multi-line fields.
 ---@param source CsvView.Parser.Source Source for getting lines.
 ---@return CsvView.Parser
-function CsvViewParser:new_with_source(quote_char, delimiter, comments, max_lookahead, source)
+function CsvViewParser:new_with_source(quote_char, delimiter, is_comment, max_lookahead, source)
   local obj = setmetatable({}, self)
   obj._quote_char = quote_char
   obj._delim_bytes = { delimiter:byte(1, #delimiter) }
   obj._delim_str = delimiter
-  obj._comments = comments or {}
+  obj._is_comment_line = is_comment
   obj._max_lookahead = max_lookahead
   obj._source = source
   return obj
-end
-
---- Check if line is a comment
----@param line string
----@return boolean
-function CsvViewParser:_is_comment_line(line)
-  for _, comment in ipairs(self._comments) do
-    if vim.startswith(line, comment) then
-      return true
-    end
-  end
-  return false
 end
 
 function CsvViewParser:invalidate_cache()
@@ -208,7 +195,7 @@ function CsvViewParser:parse_record(lnum, events)
   end
 
   -- Comment Check
-  if self:_is_comment_line(line) then
+  if self._is_comment_line(lnum, line) then
     events.comment(lnum)
     return
   end

@@ -253,6 +253,35 @@ M.print_structured_error = vim.schedule_wrap(function(header, err)
   })
 end)
 
+--- Create a comment detection function based on parser options.
+---
+--- The returned function checks if a line is a comment by:
+--- 1. Line number check: If `opts.parser.comment_lines` is set, any line with
+---    lnum <= comment_lines is considered a comment (useful for header rows).
+--- 2. Prefix check: If the line starts with any prefix in `opts.parser.comments`,
+---    it is considered a comment (e.g., "#", "//").
+---
+---@param opts CsvView.InternalOptions
+---@return fun(lnum: integer, line: string): boolean
+function M.create_is_comment(opts)
+  local comment_lines = opts.parser.comment_lines
+  local comments = opts.parser.comments
+
+  return function(lnum, line)
+    -- check comment section
+    if comment_lines and lnum <= comment_lines then
+      return true
+    end
+
+    for _, comment in ipairs(comments) do
+      if vim.startswith(line, comment) then
+        return true
+      end
+    end
+    return false
+  end
+end
+
 --- Resolve delimiter character
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
@@ -279,7 +308,7 @@ function M.resolve_delimiter(bufnr, opts, quote_char)
       char = require("csvview.sniffer").buf_detect_delimiter(
         bufnr,
         quote_char,
-        opts.parser.comments,
+        M.create_is_comment(opts),
         opts.parser.max_lookahead,
         delim.fallbacks
       )
@@ -326,7 +355,7 @@ function M.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
       bufnr,
       delimiter,
       quote_char,
-      opts.parser.comments,
+      M.create_is_comment(opts),
       opts.parser.max_lookahead
     )
   else

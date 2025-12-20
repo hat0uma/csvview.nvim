@@ -1,11 +1,13 @@
 local sniffer = require("csvview.sniffer")
 local testutil = require("tests.testutil")
+local util = require("csvview.util")
 
 describe("csvview.sniffer", function()
   local opts = {
-    comments = { "#" },
     max_lookahead = 50,
   }
+
+  local is_comment = util.create_is_comment({ parser = { comments = { "#" } } })
 
   describe("detect_delimiter", function()
     it("should detect comma delimiter", function()
@@ -15,7 +17,7 @@ describe("csvview.sniffer", function()
         "Jane,30,Los Angeles",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals(",", delimiter)
     end)
 
@@ -26,7 +28,7 @@ describe("csvview.sniffer", function()
         "Jane\t30\tLos Angeles",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals("\t", delimiter)
     end)
 
@@ -37,7 +39,7 @@ describe("csvview.sniffer", function()
         "Jane;30;Los Angeles",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals(";", delimiter)
     end)
 
@@ -48,7 +50,7 @@ describe("csvview.sniffer", function()
         "Jane|30|Los Angeles",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals("|", delimiter)
     end)
 
@@ -59,7 +61,7 @@ describe("csvview.sniffer", function()
         'Jane,30,"Los Angeles, CA"',
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals(",", delimiter)
     end)
 
@@ -71,7 +73,7 @@ describe("csvview.sniffer", function()
         "Bob,35;Chicago",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       -- Should prefer comma over semicolon due to better consistency
       assert.equals(",", delimiter)
     end)
@@ -83,12 +85,12 @@ describe("csvview.sniffer", function()
         "Jane:30:Los Angeles",
       }
 
-      local delimiter = sniffer.detect_delimiter(lines, { ",", ":" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter(lines, { ",", ":" }, '"', is_comment, opts.max_lookahead)
       assert.equals(":", delimiter)
     end)
 
     it("should return default delimiter for empty buffer", function()
-      local delimiter = sniffer.detect_delimiter({}, { ",", "\t", ";", "|" }, '"', opts.comments, opts.max_lookahead)
+      local delimiter = sniffer.detect_delimiter({}, { ",", "\t", ";", "|" }, '"', is_comment, opts.max_lookahead)
       assert.equals(",", delimiter)
     end)
 
@@ -97,7 +99,7 @@ describe("csvview.sniffer", function()
         { "single line" },
         { ",", "\t", ";", "|" },
         '"',
-        opts.comments,
+        is_comment,
         opts.max_lookahead
       )
       assert.equals(",", delimiter)
@@ -159,8 +161,49 @@ describe("csvview.sniffer", function()
         "Bob,35,70000",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
+    end)
+
+    it("should detect header with comment_lines option", function()
+      local lines = {
+        "File: data.csv",
+        "Created: 2024-01-01",
+        "name,age,salary",
+        "John,25,50000",
+        "Jane,30,60000",
+      }
+
+      local is_comment_with_lines = util.create_is_comment({
+        parser = {
+          comments = {},
+          comment_lines = 2,
+        },
+      })
+
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment_with_lines, opts.max_lookahead)
+      assert.equals(3, header_lnum)
+    end)
+
+    it("should detect header with combined comment_lines and comment prefix", function()
+      local lines = {
+        "Metadata line 1",
+        "Metadata line 2",
+        "# Additional comment",
+        "name,age,salary",
+        "John,25,50000",
+        "Jane,30,60000",
+      }
+
+      local is_comment_combined = util.create_is_comment({
+        parser = {
+          comments = { "#" },
+          comment_lines = 2,
+        },
+      })
+
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment_combined, opts.max_lookahead)
+      assert.equals(4, header_lnum)
     end)
 
     it("should not detect header when first row is numeric", function()
@@ -170,7 +213,7 @@ describe("csvview.sniffer", function()
         "3,35,70000",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.is_nil(header_lnum)
     end)
 
@@ -182,7 +225,7 @@ describe("csvview.sniffer", function()
         "3,Bob,true",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
@@ -195,7 +238,7 @@ describe("csvview.sniffer", function()
         "3,Bob,true",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(2, header_lnum)
     end)
 
@@ -207,7 +250,7 @@ describe("csvview.sniffer", function()
         "Bob,1992-06-08,11:45:00",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
@@ -220,7 +263,7 @@ describe("csvview.sniffer", function()
         "shoes,sold,medium",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.is_nil(header_lnum)
     end)
 
@@ -232,7 +275,7 @@ describe("csvview.sniffer", function()
         "Bob,1,y",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
@@ -244,17 +287,17 @@ describe("csvview.sniffer", function()
         "Tool,45.00,0.09",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
     it("should return nil for single line", function()
-      local header_lnum = sniffer.detect_header({ "name,age,city" }, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header({ "name,age,city" }, ",", '"', is_comment, opts.max_lookahead)
       assert.is_nil(header_lnum)
     end)
 
     it("should return nil for empty buffer", function()
-      local header_lnum = sniffer.detect_header({}, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header({}, ",", '"', is_comment, opts.max_lookahead)
       assert.is_nil(header_lnum)
     end)
 
@@ -267,7 +310,7 @@ describe("csvview.sniffer", function()
         "Alice,28,Boston",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
@@ -279,7 +322,7 @@ describe("csvview.sniffer", function()
         "15,16,17,18,19,20,21",
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
 
@@ -291,7 +334,7 @@ describe("csvview.sniffer", function()
         '"Widget C",39.99,true',
       }
 
-      local header_lnum = sniffer.detect_header(lines, ",", '"', opts.comments, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, ",", '"', is_comment, opts.max_lookahead)
       assert.equals(1, header_lnum)
     end)
   end)
@@ -307,8 +350,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals(",", delimiter)
       assert.equals('"', quote_char)
@@ -325,8 +368,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals("\t", delimiter)
       assert.equals('"', quote_char)
@@ -343,8 +386,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals(",", delimiter)
       assert.equals('"', quote_char)
@@ -358,8 +401,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals(",", delimiter)
       assert.equals('"', quote_char)
@@ -371,8 +414,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals("\t", delimiter)
       assert.equals('"', quote_char)
@@ -384,8 +427,8 @@ describe("csvview.sniffer", function()
 
       local quote_char = sniffer.detect_quote_char(lines, { '"', "'" })
       local delimiter =
-        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, opts.comments, opts.max_lookahead)
-      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, opts.comments, opts.max_lookahead)
+        sniffer.detect_delimiter(lines, { ",", "\t", ";", "|" }, quote_char, is_comment, opts.max_lookahead)
+      local header_lnum = sniffer.detect_header(lines, delimiter, quote_char, is_comment, opts.max_lookahead)
 
       assert.equals(",", delimiter)
       assert.equals('"', quote_char)
