@@ -435,7 +435,7 @@ end
 ---@return integer logical_row_count
 function CsvViewMetrics:row_count_logical()
   if #self._rows > 0 then
-    return assert(self._mapper:physical_to_logical(#self._rows))
+    return self._mapper:physical_to_logical(#self._rows) or 0
   else
     return 0
   end

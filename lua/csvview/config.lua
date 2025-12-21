@@ -295,6 +295,19 @@ M._highlights = {
   { name = "CsvViewCol6", link = "csvCol6" },
   { name = "CsvViewCol7", link = "csvCol7" },
   { name = "CsvViewCol8", link = "csvCol8" },
+  -- CsvViewInfo
+  { name = "CsvViewInfoTitle", link = "Title" },
+  { name = "CsvViewInfoSection", link = "Statement" },
+  { name = "CsvViewInfoKey", link = "Identifier" },
+  { name = "CsvViewInfoValue", link = "String" },
+  { name = "CsvViewInfoValueHighlight", link = "Number" },
+  { name = "CsvViewInfoBar", link = "Special" },
+  { name = "CsvViewInfoTableHeader", link = "TabLineSel" },
+  { name = "CsvViewInfoTableBorder", link = "Comment" },
+  { name = "CsvViewInfoIconPositive", link = "DiagnosticOk" },
+  { name = "CsvViewInfoIconNegative", link = "DiagnosticError" },
+  { name = "CsvViewInfoIconNeutral", link = "Comment" },
+  { name = "CsvViewInfoLegend", link = "Comment" },
 }
 
 --- Merge two configuration tables.
