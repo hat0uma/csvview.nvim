@@ -221,7 +221,8 @@ end
 
 ---Add header detection details
 ---@param reason string | CsvView.Sniffer.HeaderDetectionReason
-function ContentBuilder:add_header_detection_details(reason)
+---@param show_debug boolean?
+function ContentBuilder:add_header_detection_details(reason, show_debug)
   if type(reason) == "string" then
     self:line({ { "  " }, { reason, HL.InfoHint } })
     return
@@ -267,10 +268,12 @@ function ContentBuilder:add_header_detection_details(reason)
   self:blank()
 
   -- Debug Information
-  self:line({ { "  Debug:", HL.InfoLabel } })
-  local d = vim.split(vim.inspect(reason), "\n")
-  for _, l in ipairs(d) do
-    self:line({ { "  " .. l, HL.InfoHint } })
+  if show_debug then
+    self:line({ { "  Debug:", HL.InfoLabel } })
+    local d = vim.split(vim.inspect(reason), "\n")
+    for _, l in ipairs(d) do
+      self:line({ { "  " .. l, HL.InfoHint } })
+    end
   end
 end
 
@@ -311,9 +314,10 @@ end
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
 ---@param info CsvView.Info
+---@param show_debug boolean?
 ---@return string[] lines
 ---@return CsvViewInfo.Extmark[] extmarks
-local function generate_report(bufnr, metrics, info)
+local function generate_report(bufnr, metrics, info, show_debug)
   local builder = ContentBuilder.new()
   builder:section("Overview")
 
@@ -372,7 +376,7 @@ local function generate_report(bufnr, metrics, info)
       header_section_title = string.format("Header Analysis (Line %d)", info.header.reason.candidate_lnum)
     end
     builder:section(header_section_title)
-    builder:add_header_detection_details(info.header.reason)
+    builder:add_header_detection_details(info.header.reason, show_debug)
   end
 
   return builder:build()
@@ -389,7 +393,8 @@ end
 
 --- Show csvview info
 ---@param bufnr integer?
-function M.show(bufnr)
+---@param show_debug boolean?
+function M.show(bufnr, show_debug)
   bufnr = util.resolve_bufnr(bufnr)
   local view = views.get(bufnr)
   if not view then
@@ -404,7 +409,7 @@ function M.show(bufnr)
   end
 
   -- Generate Content
-  local lines, extmarks = generate_report(bufnr, view.metrics, info)
+  local lines, extmarks = generate_report(bufnr, view.metrics, info, show_debug)
 
   -- Create Buffer
   local infobuf = vim.api.nvim_create_buf(false, true)

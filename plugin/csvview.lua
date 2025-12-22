@@ -97,9 +97,11 @@ end, {
   end,
 })
 
-vim.api.nvim_create_user_command("CsvViewInfo", function()
+vim.api.nvim_create_user_command("CsvViewInfo", function(opts)
+  local show_debug = opts.bang
   local bufnr = vim.api.nvim_get_current_buf()
-  csvview.info(bufnr)
+  csvview.info(bufnr, show_debug)
 end, {
   desc = "[csvview] Show info of csvview",
+  bang = true,
 })

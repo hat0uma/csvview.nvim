@@ -267,8 +267,9 @@ end
 
 --- Show csvview info
 ---@param bufnr integer?
-function M.info(bufnr)
-  require("csvview.info").show(bufnr)
+---@param show_debug boolean?
+function M.info(bufnr, show_debug)
+  require("csvview.info").show(bufnr, show_debug)
 end
 
 return M
