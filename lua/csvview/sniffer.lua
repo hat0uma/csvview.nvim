@@ -325,11 +325,12 @@ end
 ---@param start_index integer? The index to start from (default is 1)
 ---@return number lower_bound The lower bound of the confidence interval
 ---@return number upper_bound The upper bound of the confidence interval
+---@return number mean The average of the confidence interval
 local function calc_confidence_interval(func, array, start_index)
   local stddev, mean = calc_stddev(func, array, start_index)
-  local lower_bound = mean - stddev * 2
+  local lower_bound = math.max(0, mean - stddev * 2)
   local upper_bound = mean + stddev * 2
-  return lower_bound, upper_bound
+  return lower_bound, upper_bound, mean
 end
 
 ---@class CsvView.Sniffer.ColumnEvidence
@@ -339,7 +340,7 @@ end
 ---@field length_score number Score from length deviation (-0.5, 0.5)
 ---@field detected_type string? The inferred type (e.g. "numeric", "date")
 ---@field first_value string The value in the header row
----@field length_stats { val: integer, min: number, max: number } Debug stats for length
+---@field length_stats { val: integer, min: number, max: number, mean: number } Debug stats for length
 
 ---@class CsvView.Sniffer.HeaderDetectionReason
 ---@field candidate_lnum number?
@@ -393,7 +394,7 @@ function M.detect_header(sample_lines, delimiter, quote_char, comment, max_looka
   local reason = { columns = {} } ---@type CsvView.Sniffer.HeaderDetectionReason
   local line_count = #sample_lines
   if line_count < 2 then
-    return nil, string.format("insufficient lines: %d < 2", line_count)
+    return nil, string.format("Insufficient lines for detecting: %d < 2", line_count)
   end
 
   local parser = create_parser(sample_lines, delimiter, quote_char, comment, max_lookahead)
@@ -411,14 +412,13 @@ function M.detect_header(sample_lines, delimiter, quote_char, comment, max_looka
     end
   end
 
-  -- No valid lines found
   if not first_valid_lnum then
-    return nil, "no valid non-comment lines found"
+    return nil, string.format("No valid non-comment lines found in first %d lines", #sample_lines)
   end
 
   -- If the first line is multiline, it cannot be a header
   if first_valid_lnum ~= first_line_end then
-    return nil, string.format("first valid line %d is multiline (ends at %d)", first_valid_lnum, first_line_end)
+    return nil, string.format("First valid line %d is multiline (ends at %d)", first_valid_lnum, first_line_end)
   end
 
   -- Collect data from subsequent lines
@@ -466,9 +466,9 @@ function M.detect_header(sample_lines, delimiter, quote_char, comment, max_looka
 
     -- Heuristic 2: Check for string length deviation
     -- This is checked for all columns and provides weaker evidence
-    local lower_bound, upper_bound = calc_confidence_interval(string.len, column_data, 2)
+    local lower_bound, upper_bound, mean = calc_confidence_interval(string.len, column_data, 2)
     local first_len = string.len(first)
-    evidence.length_stats = { val = first_len, min = lower_bound, max = upper_bound }
+    evidence.length_stats = { val = first_len, min = lower_bound, max = upper_bound, mean = mean }
     if lower_bound <= first_len and first_len <= upper_bound then
       -- The first row's length is typical for the column, less likely to be a header
       evidence.length_score = -0.5

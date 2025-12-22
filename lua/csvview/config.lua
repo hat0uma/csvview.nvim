@@ -279,35 +279,64 @@ M.defaults = {
 ---@diagnostic disable-next-line: missing-fields
 M.options = {}
 
----@type { name: string, link?: string }[]
-M._highlights = {
-  { name = "CsvViewDelimiter", link = "Delimiter" },
-  { name = "CsvViewComment", link = "Comment" },
-  { name = "CsvViewHeaderLine", link = nil },
-  { name = "CsvViewStickyHeaderSeparator", link = "Delimiter" },
+local HL = {
+  Delimiter = "CsvViewDelimiter",
+  Comment = "CsvViewComment",
+  HeaderLine = "CsvViewHeaderLine",
+  StickyHeaderSeparator = "CsvViewStickyHeaderSeparator",
   -- use built-in csv syntax highlight group.
-  { name = "CsvViewCol0", link = "csvCol0" },
-  { name = "CsvViewCol1", link = "csvCol1" },
-  { name = "CsvViewCol2", link = "csvCol2" },
-  { name = "CsvViewCol3", link = "csvCol3" },
-  { name = "CsvViewCol4", link = "csvCol4" },
-  { name = "CsvViewCol5", link = "csvCol5" },
-  { name = "CsvViewCol6", link = "csvCol6" },
-  { name = "CsvViewCol7", link = "csvCol7" },
-  { name = "CsvViewCol8", link = "csvCol8" },
+  Col0 = "CsvViewCol0",
+  Col1 = "CsvViewCol1",
+  Col2 = "CsvViewCol2",
+  Col3 = "CsvViewCol3",
+  Col4 = "CsvViewCol4",
+  Col5 = "CsvViewCol5",
+  Col6 = "CsvViewCol6",
+  Col7 = "CsvViewCol7",
+  Col8 = "CsvViewCol8",
   -- CsvViewInfo
-  { name = "CsvViewInfoTitle", link = "Title" },
-  { name = "CsvViewInfoSection", link = "Statement" },
-  { name = "CsvViewInfoKey", link = "Identifier" },
-  { name = "CsvViewInfoValue", link = "String" },
-  { name = "CsvViewInfoValueHighlight", link = "Number" },
-  { name = "CsvViewInfoBar", link = "Special" },
-  { name = "CsvViewInfoTableHeader", link = "TabLineSel" },
-  { name = "CsvViewInfoTableBorder", link = "Comment" },
-  { name = "CsvViewInfoIconPositive", link = "DiagnosticOk" },
-  { name = "CsvViewInfoIconNegative", link = "DiagnosticError" },
-  { name = "CsvViewInfoIconNeutral", link = "Comment" },
-  { name = "CsvViewInfoLegend", link = "Comment" },
+  InfoTitle = "CsvViewInfoTitle",
+  InfoSection = "CsvViewInfoSection",
+  InfoLabel = "CsvViewInfoLabel",
+  InfoText = "CsvViewInfoText",
+  InfoNumber = "CsvViewInfoNumber",
+  InfoHint = "CsvViewInfoHint",
+  InfoTableHeader = "CsvViewInfoTableHeader",
+  InfoTableBorder = "CsvViewInfoTableBorder",
+  InfoPositive = "CsvViewInfoPositive",
+  InfoNegative = "CsvViewInfoNegative",
+  InfoNeutral = "CsvViewInfoNeutral",
+  InfoScoreBar = "CsvViewInfoScoreBar",
+}
+
+M.highlights = HL
+
+M._highlight_links = {
+  [HL.Delimiter] = "Delimiter",
+  [HL.Comment] = "Comment",
+  [HL.HeaderLine] = false,
+  [HL.StickyHeaderSeparator] = "Delimiter",
+  [HL.Col0] = "csvCol0",
+  [HL.Col1] = "csvCol1",
+  [HL.Col2] = "csvCol2",
+  [HL.Col3] = "csvCol3",
+  [HL.Col4] = "csvCol4",
+  [HL.Col5] = "csvCol5",
+  [HL.Col6] = "csvCol6",
+  [HL.Col7] = "csvCol7",
+  [HL.Col8] = "csvCol8",
+  [HL.InfoTitle] = "Title",
+  [HL.InfoSection] = "Statement",
+  [HL.InfoLabel] = "Identifier",
+  [HL.InfoText] = "String",
+  [HL.InfoNumber] = "Number",
+  [HL.InfoHint] = "Conceal",
+  [HL.InfoTableHeader] = "TabLineSel",
+  [HL.InfoTableBorder] = "Comment",
+  [HL.InfoPositive] = "DiagnosticOk",
+  [HL.InfoNegative] = "DiagnosticError",
+  [HL.InfoNeutral] = "Comment",
+  [HL.InfoScoreBar] = "Special",
 }
 
 --- Merge two configuration tables.
@@ -339,8 +368,8 @@ end
 ---@param opts? CsvView.Options
 function M.setup(opts)
   -- Set colors
-  for _, hl in ipairs(M._highlights) do
-    vim.api.nvim_set_hl(0, hl.name, { link = hl.link, default = true })
+  for name, link in pairs(M._highlight_links) do
+    vim.api.nvim_set_hl(0, name, { link = link and link or nil, default = true })
   end
 
   if vim.fn.has("nvim-0.11") ~= 1 then
