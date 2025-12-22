@@ -11,6 +11,7 @@ A guide to features and configuration options.
 - [Quote Character Configuration](#quote-character-configuration)
 - [Multi-line Field Configuration](#multi-line-field-configuration)
 - [Comment Line Handling](#comment-line-handling)
+- [Buffer Statistics](#buffer-statistics)
 - [API Reference](#api-reference)
 
 ## Display Configuration
@@ -419,6 +420,24 @@ The first 2 lines will be treated as comments regardless of their content.
 " Multiple comment types (requires Lua configuration)
 ```
 
+## Buffer Statistics
+
+Display detailed information about the current CSV buffer using the `:CsvViewInfo` command.
+
+### Basic Usage
+
+```vim
+" Show buffer statistics
+:CsvViewInfo
+
+" Show with debug information
+:CsvViewInfo!
+```
+
+### Closing the Info Window
+
+Press `q` or `<Esc>` to close the info window.
+
 ## API Reference
 
 ### Core Functions
@@ -431,6 +450,9 @@ csvview.enable(bufnr?, opts?)    -- Enable for specific buffer
 csvview.disable(bufnr?)          -- Disable for specific buffer
 csvview.toggle(bufnr?, opts?)    -- Toggle with options
 csvview.is_enabled(bufnr?)       -- Check status
+
+-- Buffer information
+csvview.info(bufnr?, show_debug?) -- Show buffer statistics
 ```
 
 ### Jump API

@@ -286,15 +286,18 @@ end
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
 ---@param quote_char string
----@return string
+---@return string char, boolean auto, table<string, number>? scores
 function M.resolve_delimiter(bufnr, opts, quote_char)
   local delim = opts.parser.delimiter
   ---@diagnostic disable-next-line: no-unknown
   local char
+  local auto, scores --- @type boolean, table<string,number>?
   if type(delim) == "function" then
     char = delim(bufnr)
+    auto = false
   elseif type(delim) == "string" then
     char = delim
+    auto = false
   elseif type(delim) == "table" then
     if type(delim.default) == "string" then ---@diagnostic disable-line: undefined-field
       -- Backwards compatibility for opts.parser.delimiter.default
@@ -305,24 +308,27 @@ function M.resolve_delimiter(bufnr, opts, quote_char)
     -- If the filetype is not found, it will try to detect the delimiter using the sniffer.
     char = delim.ft[vim.bo.filetype]
     if not char then
-      char = require("csvview.sniffer").buf_detect_delimiter(
+      char, scores = require("csvview.sniffer").buf_detect_delimiter(
         bufnr,
         quote_char,
         M.create_is_comment(opts),
         opts.parser.max_lookahead,
         delim.fallbacks
       )
+      auto = true
+    else
+      auto = false
     end
   end
 
   assert(type(char) == "string", string.format("unknown delimiter type: %s", type(char)))
-  return char
+  return char, auto, scores
 end
 
 --- Get quote char character
 ---@param bufnr integer
 ---@param opts CsvView.InternalOptions
----@return string
+---@return string quote_char, boolean auto, table<string, number>? scores
 function M.resolve_quote_char(bufnr, opts)
   local delim = opts.parser.quote_char
   ---@diagnostic disable-next-line: no-unknown
@@ -333,7 +339,7 @@ function M.resolve_quote_char(bufnr, opts)
 
   assert(type(char) == "string", string.format("quote char must be a string, got %s", type(char)))
   assert(#char == 1, string.format("quote char must be a single character, got %s", char))
-  return char
+  return char, false
 end
 
 --- Get the line number of the header in the buffer
@@ -341,29 +347,32 @@ end
 ---@param opts CsvView.InternalOptions
 ---@param delimiter string
 ---@param quote_char string
----@return integer|nil
+---@return integer|nil header_lnum, boolean auto, string|CsvView.Sniffer.HeaderDetectionReason? reason
 function M.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
   local opts_header_lnum = opts.view.header_lnum
 
-  local header_lnum ---@type integer|nil
+  local header_lnum, auto, reason ---@type integer|nil,boolean, string|CsvView.Sniffer.HeaderDetectionReason?
   if type(opts_header_lnum) == "number" then
     -- If header_lnum is a number, use it as the header line number
     header_lnum = opts_header_lnum
+    auto = false
   elseif opts_header_lnum == true then
     -- If header_lnum is true, auto detect the header line
-    header_lnum = require("csvview.sniffer").buf_detect_header(
+    header_lnum, reason = require("csvview.sniffer").buf_detect_header(
       bufnr,
       delimiter,
       quote_char,
       M.create_is_comment(opts),
       opts.parser.max_lookahead
     )
+    auto = true
   else
     -- If header_lnum is false or nil, do not use a header line
     header_lnum = nil
+    auto = false
   end
 
-  return header_lnum
+  return header_lnum, auto, reason
 end
 
 return M

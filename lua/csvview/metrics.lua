@@ -425,4 +425,20 @@ function CsvViewMetrics:get_logical_field_by_offet(lnum, offset)
   return self._mapper:get_logical_field_by_offset(lnum, offset)
 end
 
+--- Get column count
+---@return integer column_count
+function CsvViewMetrics:column_count()
+  return self._columns:count()
+end
+
+--- Get logical row count
+---@return integer logical_row_count
+function CsvViewMetrics:row_count_logical()
+  if #self._rows > 0 then
+    return self._mapper:physical_to_logical(#self._rows) or 0
+  else
+    return 0
+  end
+end
+
 return CsvViewMetrics

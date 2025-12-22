@@ -9,12 +9,6 @@ local DEFAULT_DELIMITERS = { ",", "\t", ";", "|", ":", " " }
 local DEFAULT_QUOTE_CHARS = { '"', "'" }
 local DEFAULT_BUF_N_SAMPLES = 10
 
-local function debugf(fmt, ...)
-  if false then
-    print(string.format(fmt, ...))
-  end
-end
-
 --- Create a parser for the given sample lines
 ---@param sample_lines string[] Sample lines to use instead of the buffer
 ---@param delimiter string The delimiter character
@@ -94,6 +88,7 @@ end
 ---@param sample_lines string[] Sample lines to analyze
 ---@param quote_chars? string[] Possible quote characters
 ---@return string quote_char The detected quote character
+---@return table<string, number> scores The scores for quote char
 function M.detect_quote_char(sample_lines, quote_chars)
   quote_chars = quote_chars or DEFAULT_QUOTE_CHARS
   local sample = table.concat(sample_lines, "\n")
@@ -142,7 +137,7 @@ function M.detect_quote_char(sample_lines, quote_chars)
     end
   end
 
-  return best_quote
+  return best_quote, quote_scores
 end
 
 ---Detect delimiter by analyzing field consistency
@@ -152,6 +147,7 @@ end
 ---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return string delimiter The detected delimiter character
+---@return table<string, number> scores The scores for delimiter
 function M.detect_delimiter(sample_lines, delimiters, quote_char, comment, max_lookahead)
   delimiters = delimiters or DEFAULT_DELIMITERS
   local delimiter_scores = {} ---@type table<string, number> -- Store scores for each delimiter
@@ -173,7 +169,7 @@ function M.detect_delimiter(sample_lines, delimiters, quote_char, comment, max_l
     end
   end
 
-  return best_delimiter
+  return best_delimiter, delimiter_scores
 end
 
 --- Patterns for detecting date formats
@@ -329,12 +325,27 @@ end
 ---@param start_index integer? The index to start from (default is 1)
 ---@return number lower_bound The lower bound of the confidence interval
 ---@return number upper_bound The upper bound of the confidence interval
+---@return number mean The average of the confidence interval
 local function calc_confidence_interval(func, array, start_index)
   local stddev, mean = calc_stddev(func, array, start_index)
-  local lower_bound = mean - stddev * 2
+  local lower_bound = math.max(0, mean - stddev * 2)
   local upper_bound = mean + stddev * 2
-  return lower_bound, upper_bound
+  return lower_bound, upper_bound, mean
 end
+
+---@class CsvView.Sniffer.ColumnEvidence
+---@field col_idx integer
+---@field score number Total score for this column
+---@field type_score number Score from type mismatch (-1, 0, 1)
+---@field length_score number Score from length deviation (-0.5, 0.5)
+---@field detected_type string? The inferred type (e.g. "numeric", "date")
+---@field first_value string The value in the header row
+---@field length_stats { val: integer, min: number, max: number, mean: number } Debug stats for length
+
+---@class CsvView.Sniffer.HeaderDetectionReason
+---@field candidate_lnum number?
+---@field total_score number?
+---@field columns CsvView.Sniffer.ColumnEvidence[] Detailed evidence per column
 
 ------
 ---Detects if the first non-comment row is a header by analyzing its content
@@ -378,10 +389,12 @@ end
 ---@param comment fun(lnum: integer, line: string): boolean Function to determine if a line is a comment
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@return integer? header_lnum The line number of the header row, if detected
+---@return string | CsvView.Sniffer.HeaderDetectionReason reason Debug information about the detection process
 function M.detect_header(sample_lines, delimiter, quote_char, comment, max_lookahead)
+  local reason = { columns = {} } ---@type CsvView.Sniffer.HeaderDetectionReason
   local line_count = #sample_lines
   if line_count < 2 then
-    return nil
+    return nil, string.format("Insufficient lines for detecting: %d < 2", line_count)
   end
 
   local parser = create_parser(sample_lines, delimiter, quote_char, comment, max_lookahead)
@@ -399,14 +412,13 @@ function M.detect_header(sample_lines, delimiter, quote_char, comment, max_looka
     end
   end
 
-  -- No valid lines found
   if not first_valid_lnum then
-    return nil
+    return nil, string.format("No valid non-comment lines found in first %d lines", #sample_lines)
   end
 
   -- If the first line is multiline, it cannot be a header
   if first_valid_lnum ~= first_line_end then
-    return nil
+    return nil, string.format("First valid line %d is multiline (ends at %d)", first_valid_lnum, first_line_end)
   end
 
   -- Collect data from subsequent lines
@@ -424,46 +436,59 @@ function M.detect_header(sample_lines, delimiter, quote_char, comment, max_looka
   -- transpose the data to analyze columns
   local transposed = transpose_fields(data)
 
-  local header_evidence = 0
+  local total_evidence = 0
   for col_idx, column_data in ipairs(transposed) do
     local first = column_data[1]
+    local evidence = { --- @type CsvView.Sniffer.ColumnEvidence
+      col_idx = col_idx,
+      first_value = first,
+      type_score = 0,
+      length_score = 0,
+      score = 0,
+      detected_type = nil,
+      length_stats = { val = 0, min = 0, max = 0 },
+    }
 
     -- Heuristic 1: Check for type mismatch
     -- This provides strong evidence
     local best_type = best_type_for_column(column_data)
+    evidence.detected_type = best_type
+
     if best_type then
       if FIELD_TYPE_VALIDATORS[best_type](first) then
         -- The first row has the same type as the data, less likely to be a header
-        debugf("Column %d is of type %s header evidence -1", col_idx, best_type)
-        header_evidence = header_evidence - 1
+        evidence.type_score = -1
       else
         -- The first row has a different type, more likely to be a header
-        debugf("Column %d is of type %s header evidence +1", col_idx, best_type)
-        header_evidence = header_evidence + 1
+        evidence.type_score = 1
       end
     end
 
     -- Heuristic 2: Check for string length deviation
     -- This is checked for all columns and provides weaker evidence
-    local lower_bound, upper_bound = calc_confidence_interval(string.len, column_data, 2)
+    local lower_bound, upper_bound, mean = calc_confidence_interval(string.len, column_data, 2)
     local first_len = string.len(first)
+    evidence.length_stats = { val = first_len, min = lower_bound, max = upper_bound, mean = mean }
     if lower_bound <= first_len and first_len <= upper_bound then
       -- The first row's length is typical for the column, less likely to be a header
-      debugf("Column %d %d <= %d <= %d header evidence -0.5", col_idx, lower_bound, first_len, upper_bound)
-      header_evidence = header_evidence - 0.5
+      evidence.length_score = -0.5
     else
       -- The first row's length is an outlier, more likely to be a header
-      debugf("Column %d %d <= %d <= %d header evidence +0.5", col_idx, lower_bound, first_len, upper_bound)
-      header_evidence = header_evidence + 0.5
+      evidence.length_score = 0.5
     end
+
+    evidence.score = evidence.type_score + evidence.length_score
+    total_evidence = total_evidence + evidence.score
+    table.insert(reason.columns, evidence)
   end
 
-  if header_evidence > 0 then
-    debugf("Header detected at line %d with evidence %.2f", first_valid_lnum, header_evidence)
-    return first_valid_lnum
+  reason.total_score = total_evidence
+  reason.candidate_lnum = first_valid_lnum
+  if total_evidence > 0 then
+    return first_valid_lnum, reason
   end
 
-  return nil
+  return nil, reason
 end
 
 --- Detects the delimiter for a buffer by sampling lines
@@ -474,6 +499,7 @@ end
 ---@param candidates string[]? Possible delimiters to check
 ---@param n_samples integer? Number of lines to sample
 ---@return string delimiter The detected delimiter character
+---@return table<string, number> scores The scores for delimiter
 function M.buf_detect_delimiter(bufnr, quote_char, comment, max_lookahead, candidates, n_samples)
   n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
   local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
@@ -485,6 +511,7 @@ end
 ---@param candidates string[]? Possible quote characters to check
 ---@param n_samples integer? Number of lines to sample
 ---@return string quote_char The detected quote character
+---@return table<string, number> scores The scores for quote char
 function M.buf_detect_quote_char(bufnr, candidates, n_samples)
   n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
   local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)
@@ -499,6 +526,7 @@ end
 ---@param max_lookahead integer Maximum lookahead for parsing
 ---@param n_samples integer? Number of lines to sample
 ---@return integer? header_lnum The line number of the header row, if detected
+---@return string | CsvView.Sniffer.HeaderDetectionReason reason Debug information about the detection process
 function M.buf_detect_header(bufnr, delimiter, quote_char, comment, max_lookahead, n_samples)
   n_samples = n_samples or DEFAULT_BUF_N_SAMPLES
   local sample_lines = vim.api.nvim_buf_get_lines(bufnr, 0, n_samples, false)

@@ -261,6 +261,7 @@ lua require('csvview').setup()
 | `:CsvViewEnable [options]` | Enable CSV view with the specified options      |
 | `:CsvViewDisable`          | Disable CSV view                                 |
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
+| `:CsvViewInfo`             | Display buffer statistics (delimiter, header, dimensions) |
 
 #### Quick Start
 
@@ -294,6 +295,10 @@ The plugin uses the following highlight groups for customizing colors and appear
 | `CsvViewStickyHeaderSeparator`   | links to `CsvViewDelimiter`| Sticky header separator          |
 | `CsvViewHeaderLine`              | -                          | Header line highlighting         |
 | `CsvViewCol0` to `CsvViewCol8`   | links to `csvCol0`-`csvCol8`| Column-based highlighting       |
+| `CsvViewInfoTitle`               | links to `Title`           | Info window title                |
+| `CsvViewInfoSection`             | links to `Statement`       | Info window section headers      |
+| `CsvViewInfoPositive`            | links to `DiagnosticOk`    | Positive indicators in info      |
+| `CsvViewInfoNegative`            | links to `DiagnosticError` | Negative indicators in info      |
 
 ## 🎭 Events
 

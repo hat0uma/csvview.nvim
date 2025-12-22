@@ -36,9 +36,26 @@ function M.enable(bufnr, opts)
     return
   end
 
-  local quote_char = util.resolve_quote_char(bufnr, opts)
-  local delimiter = util.resolve_delimiter(bufnr, opts, quote_char)
-  local header_lnum = util.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
+  local quote_char, quote_char_detected, quote_char_scores = util.resolve_quote_char(bufnr, opts)
+  local delimiter, delimiter_detected, delimiter_scores = util.resolve_delimiter(bufnr, opts, quote_char)
+  local header_lnum, header_detected, header_reason = util.resolve_header_lnum(bufnr, opts, delimiter, quote_char)
+  vim.b[bufnr].csvview_info = { --- @class CsvView.Info
+    quote_char = {
+      text = quote_char,
+      auto_detected = quote_char_detected,
+      scores = quote_char_scores,
+    },
+    delimiter = {
+      text = delimiter,
+      auto_detected = delimiter_detected,
+      scores = delimiter_scores,
+    },
+    header = {
+      lnum = header_lnum,
+      auto_detected = header_detected,
+      reason = header_reason,
+    },
+  }
 
   -- Create a new CsvView instance
   local on_detach --- @type fun()
@@ -121,6 +138,7 @@ function M.enable(bufnr, opts)
     keymap.unregister(opts)
     sticky_header.redraw()
     vim.bo[bufnr].syntax = orig_syntax
+    vim.b[bufnr].csvview_info = nil
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
   end
 
@@ -245,6 +263,13 @@ function M.setup(opts)
       end,
     },
   }, group)
+end
+
+--- Show csvview info
+---@param bufnr integer?
+---@param show_debug boolean?
+function M.info(bufnr, show_debug)
+  require("csvview.info").show(bufnr, show_debug)
 end
 
 return M
