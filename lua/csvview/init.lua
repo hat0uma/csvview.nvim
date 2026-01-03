@@ -55,6 +55,10 @@ function M.enable(bufnr, opts)
       auto_detected = header_detected,
       reason = header_reason,
     },
+    comments = {
+      prefixes = opts.parser.comments,
+      comment_lines = opts.parser.comment_lines,
+    },
   }
 
   -- Create a new CsvView instance

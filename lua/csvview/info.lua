@@ -361,6 +361,35 @@ local function generate_report(bufnr, metrics, info, show_debug)
     { " " .. header_status, HL.InfoText },
   })
 
+  -- Comment Info
+  if info.comments then
+    local comment_parts = {} ---@type CsvViewInfo.Chunk[]
+
+    -- Comment prefixes
+    if info.comments.prefixes and #info.comments.prefixes > 0 then
+      for i, prefix in ipairs(info.comments.prefixes) do
+        if i ~= 1 then
+          table.insert(comment_parts, { ", " })
+        end
+        table.insert(comment_parts, { prefix, HL.InfoNumber })
+      end
+    end
+
+    -- Comment lines
+    if info.comments.comment_lines and info.comments.comment_lines > 0 then
+      if #comment_parts > 0 then
+        table.insert(comment_parts, { ", " })
+      end
+      table.insert(comment_parts, { "lines 1-" .. info.comments.comment_lines, HL.InfoNumber })
+    end
+
+    if #comment_parts > 0 then
+      builder:kv("Comments", comment_parts)
+    else
+      builder:kv("Comments", { { "N/A", HL.InfoNeutral } })
+    end
+  end
+
   -- Evidences
   if info.delimiter.auto_detected then
     builder:section("Delimiter Confidence")
