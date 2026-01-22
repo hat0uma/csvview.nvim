@@ -77,6 +77,17 @@ Plug 'hat0uma/csvview.nvim'
 lua require('csvview').setup()
 ```
 
+### mini.deps
+
+```lua
+local add, later = MiniDeps.add, MiniDeps.later
+
+later(function()
+    add('hat0uma/csvview.nvim')
+    require('csvview').setup()
+end)
+```
+
 ## 🛠️  Configuration
 
 `csvview.nvim` are highly customizable, Please refer to the following default settings.
