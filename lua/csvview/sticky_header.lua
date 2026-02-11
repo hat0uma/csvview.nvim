@@ -33,7 +33,9 @@ local function get_statuscolumn_or_default(winid)
     return relnum and "%C%=%s%=%r " or "%C%=%s%=%l "
   end
 
-  return "%C%=%s%=%l "
+  local num = vim.api.nvim_get_option_value("number", { win = winid, scope = "local" }) ---@type boolean
+  local trailing_space = num and " " or ""
+  return "%C%=%s%=%l" .. trailing_space
 end
 
 --- Convert the dictionary returned by nvim_eval_statusline() into a
