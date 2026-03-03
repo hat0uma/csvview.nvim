@@ -244,7 +244,7 @@ function View:_render_line(lnum)
   end
 
   -- highlight header
-  if lnum == self.header_lnum then
+  if self.header_lnum and lnum <= self.header_lnum then
     self:_add_extmark(lnum, 0, { line_hl_group = "CsvViewHeaderLine" })
   end
 
