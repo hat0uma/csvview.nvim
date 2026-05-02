@@ -11,11 +11,15 @@ local M = {}
 
 ---@class CsvView.Options.View
 ---@field min_column_width? integer
----@field spacing? integer
+---@field spacing? integer|CsvView.Options.View.Spacing
 ---@field display_mode? CsvView.Options.View.DisplayMode
 ---@field header_lnum? integer|false|true
 ---@field sticky_header? CsvView.Options.View.StickyHeader
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
+
+---@class CsvView.Options.View.Spacing
+---@field left? integer
+---@field right? integer
 
 ---@class CsvView.Options.View.StickyHeader
 ---@field enabled? boolean
@@ -127,8 +131,11 @@ M.defaults = {
     --- @type integer
     min_column_width = 5,
 
-    --- spacing between columns
-    --- @type integer
+    --- spacing between columns.
+    --- A number keeps the legacy behavior of adding that many spaces after each column.
+    --- A table can add virtual spaces around delimiters:
+    ---   spacing = { left = 1, right = 1 }
+    --- @type integer|CsvView.Options.View.Spacing
     spacing = 2,
 
     --- The display method of the delimiter

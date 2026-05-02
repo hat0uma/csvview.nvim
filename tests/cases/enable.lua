@@ -65,6 +65,50 @@ return {
     },
   },
   {
+    name = "display_mode  = 'highlight' with left and right spacing",
+    opts = {
+      view = {
+        display_mode = "highlight",
+        spacing = { left = 1, right = 1 },
+        min_column_width = 5,
+      },
+    },
+    lines = {
+      "id,alpha2,alpha3,name",
+      "4,af,afg,Afghanistan",
+      "8,al,alb,Albania",
+      "12,dz,dza,Algeria",
+    },
+    expected = {
+      "id    , alpha2 , alpha3 , name        ",
+      "    4 , af     , afg    , Afghanistan ",
+      "    8 , al     , alb    , Albania     ",
+      "   12 , dz     , dza    , Algeria     ",
+    },
+  },
+  {
+    name = "display_mode  = 'border' with left and right spacing",
+    opts = {
+      view = {
+        display_mode = "border",
+        spacing = { left = 1, right = 1 },
+        min_column_width = 5,
+      },
+    },
+    lines = {
+      "id,alpha2,alpha3,name",
+      "4,af,afg,Afghanistan",
+      "8,al,alb,Albania",
+      "12,dz,dza,Algeria",
+    },
+    expected = {
+      "id    │ alpha2 │ alpha3 │ name        ",
+      "    4 │ af     │ afg    │ Afghanistan ",
+      "    8 │ al     │ alb    │ Albania     ",
+      "   12 │ dz     │ dza    │ Algeria     ",
+    },
+  },
+  {
     name = "multi-byte delimiter and multi-characters delimiter",
     opts = {
       view = {
@@ -211,6 +255,28 @@ return {
       '             111│😀             │"abcde          ',
       "                                 fgh             ",
       '                                 ijk"            ',
+    },
+  },
+  {
+    name = "multiline fields with left and right spacing",
+    opts = {
+      view = {
+        display_mode = "border",
+        spacing = { left = 1, right = 1 },
+        min_column_width = 5,
+      },
+    },
+    lines = {
+      "a,b,c",
+      '1,2,"x',
+      "y",
+      'z"',
+    },
+    expected = {
+      "a     │ b     │ c     ",
+      '    1 │     2 │ "x    ',
+      "                y     ",
+      '                z"    ',
     },
   },
 }
