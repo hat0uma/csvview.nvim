@@ -62,6 +62,7 @@ Customize the appearance of your table columns:
   view = {
     min_column_width = 5,  -- Minimum width for each column
     spacing = 2,           -- Space between columns
+    -- spacing = { left = 1, right = 1 }, -- Virtual spaces around delimiters
   },
 }
 ```

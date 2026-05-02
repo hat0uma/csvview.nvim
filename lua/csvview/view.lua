@@ -24,6 +24,37 @@ end
 --- @field private _locked boolean
 local View = {}
 
+--- Resolve spacing configuration.
+---@param spacing integer|CsvView.Options.View.Spacing
+---@param align_direction "right" | "left"
+---@return integer left
+---@return integer right
+local function get_spacing(spacing, align_direction)
+  if type(spacing) == "table" then
+    return spacing.left or 0, spacing.right or 0
+  end
+
+  if type(spacing) == "number" then
+    if align_direction == "right" then
+      return spacing, 0
+    else
+      return 0, spacing
+    end
+  end
+
+  error("`view.spacing` expected integer or table.")
+end
+
+--- Get column align direction
+---@param field CsvView.Metrics.Field
+---@return "right" | "left"
+local function get_align_direction(field)
+  if field.is_number then
+    return "right"
+  end
+  return "left"
+end
+
 --- create new view
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
@@ -127,31 +158,38 @@ function View:_add_extmark(line, col, opts)
     vim.api.nvim_buf_set_extmark(self.bufnr, EXTMARK_NS, line - 1, col, opts)
 end
 
---- Align field to the left
+--- Add virtual padding after the field text.
 ---@param lnum integer 1-indexed lnum
 ---@param padding integer
 ---@param field CsvView.Metrics.Field
-function View:_align_field(lnum, padding, field)
+function View:_pad_after_field(lnum, padding, field)
   if padding <= 0 then
     return
   end
 
   local pad = { { string.rep(" ", padding) } }
-  if field.is_number then
-    -- align right
-    self:_add_extmark(lnum, field.offset, {
-      virt_text = pad,
-      virt_text_pos = "inline",
-      right_gravity = false,
-    })
-  else
-    -- align left
-    self:_add_extmark(lnum, field.offset + field.len, {
-      virt_text = pad,
-      virt_text_pos = "inline",
-      right_gravity = true,
-    })
+  self:_add_extmark(lnum, field.offset + field.len, {
+    virt_text = pad,
+    virt_text_pos = "inline",
+    right_gravity = true,
+  })
+end
+
+--- Add virtual padding before the field text.
+---@param lnum integer 1-indexed lnum
+---@param padding integer
+---@param field CsvView.Metrics.Field
+function View:_pad_before_field(lnum, padding, field)
+  if padding <= 0 then
+    return
   end
+
+  local pad = { { string.rep(" ", padding) } }
+  self:_add_extmark(lnum, field.offset, {
+    virt_text = pad,
+    virt_text_pos = "inline",
+    right_gravity = false,
+  })
 end
 
 --- Render delimiter char
@@ -204,14 +242,44 @@ function View:_render_field(lnum, column_index, field)
     return
   end
 
-  -- if column is last, do not render delimiter
-  local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
-  local padding = colwidth - field.display_width + self.opts.view.spacing
-
+  -- Highlight column
   if self:_field_terminated(lnum, column_index) then
     self:_highlight_field(lnum, column_index, field)
   end
-  self:_align_field(lnum, padding, field)
+
+  -- Calculate padding
+  local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
+  local align_direction = get_align_direction(field)
+  local spacing_left, spacing_right = get_spacing(self.opts.view.spacing, align_direction)
+  local align_padding = colwidth - field.display_width
+
+  -- Keep the delimiter position stable across rows by splitting padding into
+  -- alignment padding and delimiter spacing.
+  --
+  -- `align_padding` is part of the column width. It goes before right-aligned
+  -- fields and after left-aligned fields, so mixed number/text rows still end
+  -- at the same delimiter column.
+  --
+  -- `spacing_left` represents the visual gap after the previous delimiter.
+  -- The first field on a line has no previous delimiter, so table-style
+  -- spacing should not add a leading gap there.
+  local before_padding = spacing_left
+  local after_padding = spacing_right
+  local is_first_field = field.offset == 0
+  if type(self.opts.view.spacing) == "table" and is_first_field then
+    before_padding = 0
+  end
+  if align_direction == "right" then
+    before_padding = before_padding + align_padding
+  else
+    after_padding = after_padding + align_padding
+  end
+
+  -- Add padding
+  self:_pad_before_field(lnum, before_padding, field)
+  self:_pad_after_field(lnum, after_padding, field)
+
+  -- if column is last, do not render delimiter
   local next_field = self.metrics:row({ lnum = lnum }):field(column_index + 1)
   if next_field then
     self:_render_delimiter(lnum, field, next_field)
@@ -301,11 +369,12 @@ end
 --- @return integer padding
 function View:_calculate_padding_for_multiline(lnum, row)
   local padding = 0
+  local spacing_left, spacing_right = get_spacing(self.opts.view.spacing, "left")
   local ranges = self.metrics:get_logical_row_fields({ lnum = lnum })
   for i = row.skipped_ncol, 1, -1 do
     local column = self.metrics:column(i)
     if column then
-      padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + self.opts.view.spacing
+      padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + spacing_right
     end
 
     -- add padding for delimiters
@@ -326,6 +395,7 @@ function View:_calculate_padding_for_multiline(lnum, row)
         local delimiter_width = vim.fn.strdisplaywidth(delimiter_text)
         padding = padding + delimiter_width
       end
+      padding = padding + spacing_left
     end
   end
 

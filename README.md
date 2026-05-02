@@ -182,8 +182,11 @@ end)
     --- @type integer
     min_column_width = 5,
 
-    --- spacing between columns
-    --- @type integer
+    --- spacing between columns.
+    --- A number keeps the legacy behavior of adding that many spaces after each column.
+    --- A table can add virtual spaces around delimiters:
+    ---   spacing = { left = 1, right = 1 }
+    --- @type integer|{left:integer?, right:integer?}
     spacing = 2,
 
     --- The display method of the delimiter
