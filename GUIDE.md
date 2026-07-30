@@ -222,6 +222,35 @@ The plugin automatically detects header rows by analyzing file content:
 }
 ```
 
+## Sticky Columns
+
+Keep the leftmost columns in place while scrolling horizontally, like frozen panes
+in a spreadsheet. The remaining columns slide underneath them.
+
+```lua
+{
+  view = {
+    sticky_columns = {
+      enabled = true,  -- Off by default
+      count = 1,       -- Number of columns to pin, counted from the left
+    },
+  },
+}
+```
+
+Pin or unpin without editing the configuration:
+
+```vim
+:CsvViewEnable sticky_columns=2  " When enabling the view
+:CsvViewStickyColumns 2          " On an already attached buffer
+:CsvViewStickyColumns 0          " Unpin
+```
+
+When a sticky header is displayed, the header cells of the pinned columns stay in
+place with them. While columns are pinned, 'sidescrolloff' is raised for that
+window so the cursor is never hidden behind them; the previous value is restored
+when they are unpinned.
+
 ## Navigation & Text Objects
 
 ### Excel-like Navigation
