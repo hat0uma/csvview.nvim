@@ -97,4 +97,69 @@ describe("csvview", function()
   end
   run_update_tests(require("tests.cases.buffer_update"))
   run_update_tests(require("tests.cases.buffer_update_multiline"))
+
+  describe("update", function()
+    config.setup()
+    csvview.setup()
+
+    --- Enable csvview on a fresh buffer and return it.
+    ---@param opts CsvView.Options?
+    ---@return integer bufnr
+    local function enabled_buf(opts)
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        "name,age,city",
+        "John,25,New York",
+        "Jane,30,Los Angeles",
+      })
+      vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), bufnr)
+      csvview.enable(bufnr, opts)
+      vim.wait(50)
+      return bufnr
+    end
+
+    it("should apply view options to the attached view", function()
+      local bufnr = enabled_buf({ view = { display_mode = "highlight" } })
+      csvview.update(bufnr, { view = { display_mode = "border" } })
+      vim.wait(50)
+
+      local view = require("csvview.view").get(bufnr)
+      assert(view)
+      assert.equals("border", view.opts.view.display_mode)
+      assert.equals(2, vim.api.nvim_get_option_value("conceallevel", { win = 0, scope = "local" }))
+
+      csvview.disable(bufnr)
+    end)
+
+    it("should re-parse when a parser option changes", function()
+      local bufnr = enabled_buf({ parser = { delimiter = "," } })
+      csvview.update(bufnr, { parser = { delimiter = ";" } })
+      vim.wait(50)
+
+      assert.is_true(csvview.is_enabled(bufnr))
+      assert.equals(";", vim.b[bufnr].csvview_info.delimiter.text)
+
+      -- The whole line is one field with the new delimiter.
+      local view = require("csvview.view").get(bufnr)
+      assert(view)
+      assert.equals(1, view.metrics:row({ lnum = 1 }):field_count())
+
+      csvview.disable(bufnr)
+    end)
+
+    it("should warn and do nothing when the buffer is not enabled", function()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local notified = false
+      local notify = vim.notify
+      vim.notify = function() ---@diagnostic disable-line: duplicate-set-field
+        notified = true
+      end
+
+      csvview.update(bufnr, { view = { display_mode = "border" } })
+      vim.notify = notify ---@diagnostic disable-line: duplicate-set-field
+
+      assert.is_true(notified)
+      assert.is_false(csvview.is_enabled(bufnr))
+    end)
+  end)
 end)

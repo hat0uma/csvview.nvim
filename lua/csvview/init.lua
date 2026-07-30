@@ -196,22 +196,37 @@ function M.toggle(bufnr, opts)
   end
 end
 
---- Set the number of pinned columns for a buffer.
+--- Change options of an already enabled buffer.
 ---
---- Enables sticky columns for `count >= 1` and disables them for 0. The view is
---- already attached at this point, so this only retunes the overlay.
+--- `opts` is merged over the options the buffer was enabled with. View options are
+--- re-applied to the attached view and the buffer is re-rendered. Parser options
+--- decide how the buffer is split into fields, so changing one re-parses the buffer,
+--- which is a disable and enable round trip.
 ---@param bufnr integer?
----@param count integer
-function M.set_sticky_columns(bufnr, count)
+---@param opts CsvView.Options
+function M.update(bufnr, opts)
   bufnr = util.resolve_bufnr(bufnr)
   local view = views.get(bufnr)
   if not view then
-    vim.notify("csvview: not enabled for this buffer.", vim.log.levels.WARN)
+    vim.notify("csvview: not enabled for this buffer.")
     return
   end
 
-  view.opts.view.sticky_columns.enabled = count >= 1
-  view.opts.view.sticky_columns.count = math.max(count, 1)
+  local merged = vim.tbl_deep_extend("force", view.opts, opts) --[[@as CsvView.InternalOptions]]
+  if not vim.deep_equal(merged.parser, view.opts.parser) then
+    M.disable(bufnr)
+    M.enable(bufnr, merged)
+    return
+  end
+
+  view.opts = merged
+  view:clear()
+  for _, winid in ipairs(util.buf_tabpage_win_find(0, bufnr)) do
+    view:setup_window(winid) -- `display_mode` decides the conceal options
+  end
+
+  vim.b[bufnr].csvview_refresh_requested = true
+  sticky_header.redraw()
   sticky_columns.redraw()
 end
 

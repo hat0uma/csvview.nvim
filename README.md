@@ -293,6 +293,7 @@ end)
 | `:CsvViewDisable`          | Disable CSV view                                 |
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
 | `:CsvViewInfo`             | Display buffer statistics (delimiter, header, dimensions) |
+| `:CsvViewUpdate [options]` | Change options of an enabled buffer               |
 | `:CsvViewStickyColumns [N]` | Pin the leftmost N columns of the attached buffer (`0` unpins) |
 
 #### Quick Start

@@ -246,6 +246,14 @@ Pin or unpin without editing the configuration:
 :CsvViewStickyColumns 0          " Unpin
 ```
 
+`:CsvViewStickyColumns` is shorthand for `:CsvViewUpdate sticky_columns=2`, which
+changes any option on an enabled buffer:
+
+```vim
+:CsvViewUpdate display_mode=border
+:CsvViewUpdate delimiter=; header_lnum=1
+```
+
 When a sticky header is displayed, the header cells of the pinned columns stay in
 place with them. While columns are pinned, 'sidescrolloff' is raised for that
 window so the cursor is never hidden behind them; the previous value is restored

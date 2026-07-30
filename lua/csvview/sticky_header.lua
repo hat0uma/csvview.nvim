@@ -126,6 +126,18 @@ function M.close_header_win_for(winid)
   end)
 end
 
+--- statuscolumn function for the sticky header window.
+---
+--- Kept because it is referenced by name from the 'statuscolumn' expression, so a
+--- user configuration may hold a copy of that string.
+---@deprecated use `require("csvview.win_overlay").statuscolumn`
+---@param winid integer csvview attached window
+---@return string statuscolumn
+function M.statuscolumn(winid)
+  vim.deprecate("csvview.sticky_header.statuscolumn", "csvview.win_overlay.statuscolumn", "2.0.0", "csvview.nvim")
+  return win_overlay.statuscolumn(winid)
+end
+
 --- Redraw all sticky headers
 function M.redraw()
   local wins = vim.api.nvim_tabpage_list_wins(0)

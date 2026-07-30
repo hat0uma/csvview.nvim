@@ -89,9 +89,23 @@ end, {
   end,
 })
 
+vim.api.nvim_create_user_command("CsvViewUpdate", function(opts)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cmdopts = cmdline:parse(opts.args, create_empty_opts())
+  csvview.update(bufnr, cmdopts)
+end, {
+  desc = "[csvview] Change options of an enabled buffer",
+  nargs = "?",
+  complete = function(arg_lead, cmd_line, cursor_pos)
+    return cmdline:complete(arg_lead, cmd_line, cursor_pos)
+  end,
+})
+
 vim.api.nvim_create_user_command("CsvViewStickyColumns", function(opts)
   local count = tonumber(opts.args) or 1
-  csvview.set_sticky_columns(vim.api.nvim_get_current_buf(), count)
+  csvview.update(vim.api.nvim_get_current_buf(), {
+    view = { sticky_columns = { enabled = count >= 1, count = math.max(count, 1) } },
+  })
 end, {
   desc = "[csvview] Pin the leftmost N columns (0 to unpin)",
   nargs = "?",
