@@ -126,6 +126,24 @@ describe("sticky_columns", function()
     end
   end
 
+  it("draws a separator at the right edge when configured", function()
+    local bufnr = vim.api.nvim_get_current_buf()
+    csvview.enable(bufnr, { view = { sticky_columns = { enabled = true, count = 1, separator = "." } } })
+    vim.wait(50)
+
+    vim.fn.winrestview({ topline = 10, lnum = 15, leftcol = 40, col = 60 })
+    require("csvview.sticky_columns").redraw()
+    vim.wait(20)
+
+    local winid = get_sticky_columns_win()
+    assert(winid)
+    local border = vim.api.nvim_win_get_config(winid).border
+    assert.are.same({ ".", "CsvViewStickyColumnsSeparator" }, border[4])
+
+    csvview.disable(bufnr)
+    vim.wait(20)
+  end)
+
   it("reserves and restores 'sidescrolloff'", function()
     local winid = vim.api.nvim_get_current_win()
     vim.api.nvim_set_option_value("sidescrolloff", 3, { win = winid, scope = "local" })

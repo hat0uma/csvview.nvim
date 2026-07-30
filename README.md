@@ -244,6 +244,14 @@ end)
       --- :CsvViewStickyColumns 2
       --- @type integer
       count = 1,
+
+      --- The separator character drawn at the right edge of the pinned columns,
+      --- where the scrolling columns pass underneath.
+      --- Off by default: with `display_mode = "border"` the pinned columns already
+      --- end in a delimiter there, and a separator would double it.
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = false,
     },
   },
 
@@ -326,6 +334,7 @@ The plugin uses the following highlight groups for customizing colors and appear
 | `CsvViewDelimiter`               | links to `Comment`         | Delimiter highlighting           |
 | `CsvViewComment`                 | links to `Comment`         | Comment line highlighting        |
 | `CsvViewStickyHeaderSeparator`   | links to `CsvViewDelimiter`| Sticky header separator          |
+| `CsvViewStickyColumnsSeparator`  | links to `CsvViewDelimiter`| Sticky columns separator         |
 | `CsvViewHeaderLine`              | -                          | Header line highlighting         |
 | `CsvViewCol0` to `CsvViewCol8`   | links to `csvCol0`-`csvCol8`| Column-based highlighting       |
 | `CsvViewInfoTitle`               | links to `Title`           | Info window title                |

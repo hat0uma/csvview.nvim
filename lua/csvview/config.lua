@@ -29,6 +29,7 @@ local M = {}
 ---@class CsvView.Options.View.StickyColumns
 ---@field enabled? boolean
 ---@field count? integer
+---@field separator? string|false
 
 ---@class CsvView.Options.Keymaps
 ---@field textobject_field_inner? CsvView.Keymap
@@ -198,6 +199,14 @@ M.defaults = {
       --- :CsvViewStickyColumns 2
       --- @type integer
       count = 1,
+
+      --- The separator character drawn at the right edge of the pinned columns,
+      --- where the scrolling columns pass underneath.
+      --- Off by default: with `display_mode = "border"` the pinned columns already
+      --- end in a delimiter there, and a separator would double it.
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = false,
     },
   },
 
@@ -313,6 +322,7 @@ local HL = {
   Comment = "CsvViewComment",
   HeaderLine = "CsvViewHeaderLine",
   StickyHeaderSeparator = "CsvViewStickyHeaderSeparator",
+  StickyColumnsSeparator = "CsvViewStickyColumnsSeparator",
   -- use built-in csv syntax highlight group.
   Col0 = "CsvViewCol0",
   Col1 = "CsvViewCol1",
@@ -345,6 +355,7 @@ M._highlight_links = {
   [HL.Comment] = "Comment",
   [HL.HeaderLine] = false,
   [HL.StickyHeaderSeparator] = "Delimiter",
+  [HL.StickyColumnsSeparator] = "Delimiter",
   [HL.Col0] = "csvCol0",
   [HL.Col1] = "csvCol1",
   [HL.Col2] = "csvCol2",

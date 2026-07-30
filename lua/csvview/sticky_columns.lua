@@ -13,6 +13,19 @@ local function gutter_width(winid)
   return vim.fn.getwininfo(winid)[1].textoff or 0
 end
 
+--- Get the separator drawn at the right edge of the pinned columns.
+---@param opts CsvView.InternalOptions
+---@return (string| { [1]:string, [2]:string })[]?
+local function get_separator_border(opts)
+  local separator = opts.view.sticky_columns.separator
+  if not separator then
+    return nil
+  end
+
+  local edge = { separator, "CsvViewStickyColumnsSeparator" }
+  return { "", "", edge, edge, edge, "", "", "" }
+end
+
 --- Open or update an overlay window covering the pinned columns.
 ---
 --- The overlay shows the same buffer, so csvview's alignment padding, which lives
@@ -31,6 +44,7 @@ local function open_overlay(wins, winid, view, role, win_opts)
   win_opts.col = gutter_width(winid)
   win_opts.focusable = false
   win_opts.style = "minimal"
+  win_opts.border = get_separator_border(view.opts)
 
   local overlay_winid = wins[winid]
   if not overlay_winid or not vim.api.nvim_win_is_valid(overlay_winid) then
