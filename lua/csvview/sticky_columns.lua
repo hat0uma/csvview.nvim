@@ -3,62 +3,111 @@ local win_overlay = require("csvview.win_overlay")
 local M = {}
 
 M._sticky_columns_wins = {} --- @type table<integer,integer> winid -> sticky-columns winid
+M._corner_wins = {} --- @type table<integer,integer> winid -> pinned-header-corner winid
 M._saved_sidescrolloff = {} --- @type table<integer,integer> winid -> 'sidescrolloff' before pinning
 
---- Sync the vertical scroll of the sticky columns window with the main window.
+--- Width of the gutter (number column, signs, folds) of a window.
+---@param winid integer
+---@return integer
+local function gutter_width(winid)
+  return vim.fn.getwininfo(winid)[1].textoff or 0
+end
+
+--- Open or update an overlay window covering the pinned columns.
 ---
---- The overlay shows the same buffer with `leftcol` held at 0, so the pinned columns
---- stay in place while the main window scrolls horizontally.
+--- The overlay shows the same buffer, so csvview's alignment padding, which lives
+--- in buffer extmarks, renders exactly as it does in the main window. It is placed
+--- after the main window's gutter and draws no gutter of its own, so its whole
+--- width is text and the columns line up.
+---@param wins table<integer,integer> winid -> overlay winid
 ---@param winid integer csvview attached window
----@param columns_winid integer sticky-columns window
-local function sync_vertical_scroll(winid, columns_winid)
-  local win_view = vim.api.nvim_win_call(winid, vim.fn.winsaveview) ---@type vim.fn.winsaveview.ret
-  vim.api.nvim_win_call(columns_winid, function()
+---@param view CsvView.View
+---@param role "columns"|"corner"
+---@param win_opts vim.api.keyset.win_config
+---@return integer overlay_winid
+local function open_overlay(wins, winid, view, role, win_opts)
+  win_opts.win = winid
+  win_opts.relative = "win"
+  win_opts.col = gutter_width(winid)
+  win_opts.focusable = false
+  win_opts.style = "minimal"
+
+  local overlay_winid = wins[winid]
+  if not overlay_winid or not vim.api.nvim_win_is_valid(overlay_winid) then
+    win_opts.noautocmd = true
+    overlay_winid = vim.api.nvim_open_win(view.bufnr, false, win_opts)
+    wins[winid] = overlay_winid
+  else
+    vim.api.nvim_win_set_config(overlay_winid, win_opts)
+    if vim.api.nvim_win_get_buf(overlay_winid) ~= view.bufnr then
+      vim.api.nvim_win_set_buf(overlay_winid, view.bufnr)
+    end
+  end
+
+  -- Mark as sticky columns window ("columns" or "corner")
+  vim.w[overlay_winid].csvview_sticky_columns_win = role
+
+  -- No gutter of its own: the main window already draws one to the left of it.
+  local opts = { win = overlay_winid, scope = "local" } ---@type vim.api.keyset.option
+  vim.api.nvim_set_option_value("statuscolumn", "", opts)
+  vim.api.nvim_set_option_value("signcolumn", "no", opts)
+  vim.api.nvim_set_option_value("foldcolumn", "0", opts)
+  -- use Normal instead of NormalFloat
+  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", opts)
+
+  -- Same conceal and wrap setup as the csvview window, so `display_mode = "border"`
+  -- renders the delimiter here the same way.
+  view:setup_window(overlay_winid)
+
+  return overlay_winid
+end
+
+--- Scroll an overlay to the given line, with the pinned columns in view.
+---@param overlay_winid integer
+---@param lnum integer
+local function scroll_overlay_to(overlay_winid, lnum)
+  vim.api.nvim_win_call(overlay_winid, function()
     local current = vim.fn.winsaveview()
-    if current.topline ~= win_view.topline or current.leftcol ~= 0 then
-      vim.fn.winrestview({ topline = win_view.topline, lnum = win_view.topline, leftcol = 0 })
+    if current.topline ~= lnum or current.leftcol ~= 0 then
+      vim.fn.winrestview({ topline = lnum, lnum = lnum, leftcol = 0 })
     end
   end)
 end
 
---- Display sticky columns.
+--- Display the pinned columns.
 ---@param winid integer
 ---@param view CsvView.View
 ---@param width integer
 local function show_sticky_columns(winid, view, width)
-  -- Same approach as the sticky header, rotated 90 degrees: a floating window showing
-  -- the same buffer. Since csvview's alignment padding lives in buffer extmarks, the
-  -- overlay renders the columns exactly as the main window does.
-  local win_opts = { ---@type vim.api.keyset.win_config
-    win = winid,
-    relative = "win",
+  local overlay = open_overlay(M._sticky_columns_wins, winid, view, "columns", {
     width = width,
     height = vim.api.nvim_win_get_height(winid),
     row = 0,
-    col = 0,
-    focusable = false,
-    style = "minimal",
-    -- Keep the sticky header, which is created at the same position, on top.
+    -- Below the sticky header, which covers the same top row.
     zindex = 45,
-  }
+  })
 
-  local columns_winid = M._sticky_columns_wins[winid]
-  if not columns_winid or not vim.api.nvim_win_is_valid(columns_winid) then
-    win_opts.noautocmd = true
-    columns_winid = vim.api.nvim_open_win(view.bufnr, false, win_opts)
-    M._sticky_columns_wins[winid] = columns_winid
-  else
-    vim.api.nvim_win_set_config(columns_winid, win_opts)
-    if vim.api.nvim_win_get_buf(columns_winid) ~= view.bufnr then
-      vim.api.nvim_win_set_buf(columns_winid, view.bufnr)
-    end
-  end
+  scroll_overlay_to(overlay, vim.api.nvim_win_call(winid, vim.fn.winsaveview).topline)
+end
 
-  -- Mark as sticky columns window
-  vim.w[columns_winid].csvview_sticky_columns_win = true
+--- Display the pinned columns of the header line, on top of the sticky header.
+---
+--- The sticky header scrolls horizontally with the window, so without this the
+--- header cells of the pinned columns would slide away while their data cells
+--- stay put.
+---@param winid integer
+---@param view CsvView.View
+---@param width integer
+local function show_corner(winid, view, width)
+  local overlay = open_overlay(M._corner_wins, winid, view, "corner", {
+    width = width,
+    height = 1,
+    row = 0,
+    -- Above the sticky header.
+    zindex = 55,
+  })
 
-  win_overlay.setup_overlay_win_options(columns_winid, winid)
-  vim.api.nvim_set_option_value("wrap", false, { win = columns_winid, scope = "local" })
+  scroll_overlay_to(overlay, view.header_lnum)
 end
 
 --- Width of the pinned region, or nil if this window has nothing to pin.
@@ -77,9 +126,8 @@ local function pinned_width(winid, view)
     return nil
   end
 
-  -- Never cover the whole window.
-  local gutter = vim.fn.getwininfo(winid)[1].textoff or 0
-  return math.min(width, vim.api.nvim_win_get_width(winid) - gutter - 1)
+  -- Never cover the whole text area.
+  return math.min(width, vim.api.nvim_win_get_width(winid) - gutter_width(winid) - 1)
 end
 
 --- Whether the overlay should currently be drawn.
@@ -127,27 +175,34 @@ local function restore_sidescrolloff(winid)
   end
 end
 
---- Close the sticky columns window of a csvview window
+--- Close one overlay window
+---@param wins table<integer,integer> winid -> overlay winid
 ---@param winid integer
-function M.close_columns_win_for(winid)
-  restore_sidescrolloff(winid)
-
-  local columns_win = M._sticky_columns_wins[winid]
-  if not columns_win then
+local function close_overlay(wins, winid)
+  local overlay = wins[winid]
+  if not overlay then
     return
   end
 
-  M._sticky_columns_wins[winid] = nil
-  if not vim.api.nvim_win_is_valid(columns_win) then
+  wins[winid] = nil
+  if not vim.api.nvim_win_is_valid(overlay) then
     return
   end
 
   -- Close (use vim.schedule to avoid issues when called during BufUnload)
   vim.schedule(function()
-    if vim.api.nvim_win_is_valid(columns_win) then
-      pcall(vim.api.nvim_win_close, columns_win, true)
+    if vim.api.nvim_win_is_valid(overlay) then
+      pcall(vim.api.nvim_win_close, overlay, true)
     end
   end)
+end
+
+--- Close the sticky columns windows of a csvview window
+---@param winid integer
+function M.close_columns_win_for(winid)
+  restore_sidescrolloff(winid)
+  close_overlay(M._sticky_columns_wins, winid)
+  close_overlay(M._corner_wins, winid)
 end
 
 --- Redraw all sticky columns
@@ -157,21 +212,22 @@ function M.redraw()
     local width = view and pinned_width(winid, view)
     if not width then
       M.close_columns_win_for(winid)
+    elseif not should_show(winid) then
+      -- Keep the reservation, drop the overlays.
+      set_sidescrolloff(winid, width)
+      close_overlay(M._sticky_columns_wins, winid)
+      close_overlay(M._corner_wins, winid)
     else
       -- Reserve the room before the overlay is needed, so the cursor is never
       -- caught behind it on the redraw that first scrolls the window.
       set_sidescrolloff(winid, width)
-      if should_show(winid) then
-        show_sticky_columns(winid, view, width)
-        sync_vertical_scroll(winid, M._sticky_columns_wins[winid])
-      elseif M._sticky_columns_wins[winid] then
-        local columns_win = M._sticky_columns_wins[winid]
-        M._sticky_columns_wins[winid] = nil
-        vim.schedule(function()
-          if vim.api.nvim_win_is_valid(columns_win) then
-            pcall(vim.api.nvim_win_close, columns_win, true)
-          end
-        end)
+      show_sticky_columns(winid, view, width)
+
+      -- The corner is only needed where a sticky header is actually drawn.
+      if view.header_lnum and require("csvview.sticky_header")._sticky_header_wins[winid] then
+        show_corner(winid, view, width)
+      else
+        close_overlay(M._corner_wins, winid)
       end
     end
   end

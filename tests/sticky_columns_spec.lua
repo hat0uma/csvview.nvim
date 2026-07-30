@@ -9,9 +9,10 @@ local csvview = require("csvview")
 ---@field opts CsvView.Options
 ---@field assert fun(case: CsvView.Tests.StickyColumnsCase)
 
-local function get_sticky_columns_win()
+---@param role? "columns"|"corner"
+local function get_sticky_columns_win(role)
   for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if vim.w[winid].csvview_sticky_columns_win then
+    if vim.w[winid].csvview_sticky_columns_win == (role or "columns") then
       return winid
     end
   end
