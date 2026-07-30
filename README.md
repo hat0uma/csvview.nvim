@@ -228,6 +228,23 @@ end)
       --- @type string|false
       separator = "─",
     },
+
+    --- The sticky columns feature settings
+    --- Keeps the leftmost columns in place while scrolling horizontally,
+    --- like frozen panes in a spreadsheet.
+    sticky_columns = {
+      --- Whether to enable the sticky columns feature
+      --- @type boolean
+      enabled = false,
+
+      --- Number of columns to pin, counted from the left.
+      --- You can also specify it on the command line.
+      --- e.g:
+      --- :CsvViewEnable sticky_columns=2
+      --- :CsvViewStickyColumns 2
+      --- @type integer
+      count = 1,
+    },
   },
 
   --- Keymaps for csvview.
@@ -276,6 +293,7 @@ end)
 | `:CsvViewDisable`          | Disable CSV view                                 |
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
 | `:CsvViewInfo`             | Display buffer statistics (delimiter, header, dimensions) |
+| `:CsvViewStickyColumns [N]` | Pin the leftmost N columns of the attached buffer (`0` unpins) |
 
 #### Quick Start
 
