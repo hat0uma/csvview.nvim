@@ -1,6 +1,7 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
+local sticky_columns = require("csvview.sticky_columns")
 local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
@@ -141,6 +142,7 @@ function M.enable(bufnr, opts)
     metrics:clear()
     keymap.unregister(opts)
     sticky_header.redraw()
+    sticky_columns.redraw()
     vim.bo[bufnr].syntax = orig_syntax
     vim.b[bufnr].csvview_info = nil
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
@@ -160,6 +162,7 @@ function M.enable(bufnr, opts)
     keymap.register(opts)
     views.attach(bufnr, view)
     sticky_header.redraw()
+    sticky_columns.redraw()
     vim.cmd([[redraw!]])
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
@@ -191,6 +194,25 @@ function M.toggle(bufnr, opts)
   else
     M.enable(bufnr, opts)
   end
+end
+
+--- Set the number of pinned columns for a buffer.
+---
+--- Enables sticky columns for `count >= 1` and disables them for 0. The view is
+--- already attached at this point, so this only retunes the overlay.
+---@param bufnr integer?
+---@param count integer
+function M.set_sticky_columns(bufnr, count)
+  bufnr = util.resolve_bufnr(bufnr)
+  local view = views.get(bufnr)
+  if not view then
+    vim.notify("csvview: not enabled for this buffer.", vim.log.levels.WARN)
+    return
+  end
+
+  view.opts.view.sticky_columns.enabled = count >= 1
+  view.opts.view.sticky_columns.count = math.max(count, 1)
+  sticky_columns.redraw()
 end
 
 --- Register autocmds
@@ -240,20 +262,27 @@ function M.setup(opts)
   -- Register autocmds
   local group = vim.api.nvim_create_augroup("csvview", {})
   register_autocmds({
-    { -- `CursorMoved` is necessary to hide the sticky header when cursor overlaps the header.
+    { -- `CursorMoved` is necessary to hide the overlays when the cursor is underneath them.
       event = { "WinEnter", "WinScrolled", "WinResized", "VimResized", "CursorMoved" },
-      callback = sticky_header.redraw,
+      callback = function()
+        sticky_header.redraw()
+        sticky_columns.redraw()
+      end,
     },
     {
       event = "OptionSet",
       pattern = { "number", "relativenumber", "numberwidth", "signcolumn", "foldcolumn" },
-      callback = sticky_header.redraw,
+      callback = function()
+        sticky_header.redraw()
+        sticky_columns.redraw()
+      end,
     },
     {
       event = "WinClosed",
       callback = function(args)
         local winid = assert(tonumber(args.match))
         sticky_header.close_header_win_for(winid)
+        sticky_columns.close_columns_win_for(winid)
       end,
     },
     { -- Detach view when the buffer is deleted

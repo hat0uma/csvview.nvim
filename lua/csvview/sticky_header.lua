@@ -1,3 +1,5 @@
+local win_overlay = require("csvview.win_overlay")
+
 local M = {}
 
 M._sticky_header_wins = {} --- @type table<integer,integer> winid -> sticky-header winid
@@ -14,93 +16,6 @@ local function sync_horizontal_scroll(winid, header_winid, header_lnum)
       vim.fn.winrestview({ topline = header_lnum, lnum = header_lnum, leftcol = win_view.leftcol })
     end
   end)
-end
-
---- Get the 'statuscolumn' option of the window, or the default value if it is empty.
----@param winid integer window ID
----@return string
-local function get_statuscolumn_or_default(winid)
-  local statuscolumn = vim.api.nvim_get_option_value("statuscolumn", { win = winid, scope = "local" }) ---@type string
-  if statuscolumn ~= "" then
-    return statuscolumn
-  end
-
-  -- default
-  if vim.fn.has("nvim-0.11") ~= 1 then
-    -- below neovim 0.11
-    -- https://github.com/neovim/neovim/pull/29357
-    local relnum = vim.api.nvim_get_option_value("relativenumber", { win = winid, scope = "local" }) ---@type boolean
-    return relnum and "%C%=%s%=%r " or "%C%=%s%=%l "
-  end
-
-  local num = vim.api.nvim_get_option_value("number", { win = winid, scope = "local" }) ---@type boolean
-  local trailing_space = num and " " or ""
-  return "%C%=%s%=%l" .. trailing_space
-end
-
---- Convert the dictionary returned by nvim_eval_statusline() into a
---- 'statuscolumn'-compatible string that reproduces the highlights.
---- @param eval_result { str: string, width: number, highlights: {start: number, group:string, groups: string[] }[] } A dictionary from nvim_eval_statusline()
---- @return string converted A string in 'statuscolumn' format.
-local function format_to_stc_string(eval_result)
-  local text = eval_result.str or ""
-  local highlights = eval_result.highlights
-  if not highlights or #highlights == 0 then
-    return text
-  end
-
-  local pieces = {}
-  for i, hl in ipairs(highlights) do
-    local start_index = hl.start
-    local end_index = (i < #highlights) and highlights[i + 1].start or #text
-    -- Extract the string corresponding to the current segment
-    local segment = string.sub(text, start_index + 1, end_index)
-
-    -- Use the last highlight group
-    local groups = hl.groups or { hl.group } -- fallback to hl.group for compatibility
-    local group_name = #groups > 0 and groups[#groups] or "Normal"
-
-    -- %#…# to start highlight, %* to end highlight
-    table.insert(pieces, "%#" .. group_name .. "#" .. segment .. "%*")
-  end
-
-  return table.concat(pieces)
-end
-
---- Copy window options from one window to another
---- @param names string[]: List of option names to copy
---- @param source integer: Source window ID
---- @param target integer: Target window ID
-local function copy_win_options(names, source, target)
-  for _, name in ipairs(names) do
-    local value = vim.api.nvim_get_option_value(name, { win = source, scope = "local" })
-    vim.api.nvim_set_option_value(name, value, { win = target, scope = "local" })
-  end
-end
-
---- Set window options for the sticky header window
----@param sticky_header_winid integer
----@param winid integer
-local function set_sticky_header_win_options(sticky_header_winid, winid)
-  local opts = { ---@type vim.api.keyset.option
-    win = sticky_header_winid,
-    scope = "local",
-  }
-
-  -- Set special statuscolumn for sticky header window
-  local statuscolumn = string.format("%%{%%v:lua.require('csvview.sticky_header').statuscolumn(%d)%%}", winid)
-  vim.api.nvim_set_option_value("statuscolumn", statuscolumn, opts)
-
-  -- use Normal instead of NormalFloat
-  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", opts)
-
-  -- Copy window options from the main window to the sticky header window
-  copy_win_options({
-    "relativenumber",
-    "signcolumn",
-    "foldcolumn",
-    "numberwidth",
-  }, winid, sticky_header_winid)
 end
 
 --- Get the border characters for the sticky header window.
@@ -154,7 +69,7 @@ local function show_sticky_header(winid, view)
   vim.w[sticky_header_winid].csvview_sticky_header_win = true
 
   -- Set window options
-  set_sticky_header_win_options(sticky_header_winid, winid)
+  win_overlay.setup_overlay_win_options(sticky_header_winid, winid)
 end
 
 --- Determine if the sticky header should be shown.
@@ -190,24 +105,6 @@ local function should_show_sticky_header(winid, view)
   return true
 end
 
---- Get the CsvView.View that is displayed in the window.
----@param winid integer window ID
----@return CsvView.View? view
-local function get_opened_csvview(winid)
-  if not vim.api.nvim_win_is_valid(winid) then
-    return
-  end
-
-  -- sticky header window
-  if vim.w[winid].csvview_sticky_header_win then
-    return
-  end
-
-  local bufnr = vim.api.nvim_win_get_buf(winid)
-  local view = require("csvview.view").get(bufnr)
-  return view
-end
-
 --- Close header window
 ---@param winid integer
 function M.close_header_win_for(winid)
@@ -229,33 +126,11 @@ function M.close_header_win_for(winid)
   end)
 end
 
---- statuscolumn function for sticky header window.
----@param winid integer csvview attached window
----@return string statuscolumn
-function M.statuscolumn(winid)
-  if not vim.api.nvim_win_is_valid(winid) then
-    return ""
-  end
-
-  -- Evaluate the status column in the original window and reflect the result in the sticky header window.
-  -- This allows correct display of things like relativenumber.
-  local statuscolumn = get_statuscolumn_or_default(winid)
-  local data = vim.api.nvim_eval_statusline(statuscolumn, {
-    use_statuscol_lnum = vim.v.lnum,
-    winid = winid,
-    highlights = true,
-    fillchar = " ",
-  })
-
-  ---@diagnostic disable-next-line: param-type-mismatch
-  return format_to_stc_string(data)
-end
-
 --- Redraw all sticky headers
 function M.redraw()
   local wins = vim.api.nvim_tabpage_list_wins(0)
   for _, winid in ipairs(wins) do
-    local view = get_opened_csvview(winid)
+    local view = win_overlay.get_opened_csvview(winid)
     if view and should_show_sticky_header(winid, view) then
       show_sticky_header(winid, view)
       sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.header_lnum)

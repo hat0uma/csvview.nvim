@@ -15,6 +15,7 @@ local M = {}
 ---@field display_mode? CsvView.Options.View.DisplayMode
 ---@field header_lnum? integer|false|true
 ---@field sticky_header? CsvView.Options.View.StickyHeader
+---@field sticky_columns? CsvView.Options.View.StickyColumns
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
 
 ---@class CsvView.Options.View.Spacing
@@ -24,6 +25,10 @@ local M = {}
 ---@class CsvView.Options.View.StickyHeader
 ---@field enabled? boolean
 ---@field separator? string|false
+
+---@class CsvView.Options.View.StickyColumns
+---@field enabled? boolean
+---@field count? integer
 
 ---@class CsvView.Options.Keymaps
 ---@field textobject_field_inner? CsvView.Keymap
@@ -176,6 +181,23 @@ M.defaults = {
       --- set `false` to disable the separator
       --- @type string|false
       separator = "─",
+    },
+
+    --- The sticky columns feature settings
+    --- Keeps the leftmost columns in place while scrolling horizontally,
+    --- like frozen panes in a spreadsheet.
+    sticky_columns = {
+      --- Whether to enable the sticky columns feature
+      --- @type boolean
+      enabled = false,
+
+      --- Number of columns to pin, counted from the left.
+      --- You can also specify it on the command line.
+      --- e.g:
+      --- :CsvViewEnable sticky_columns=2
+      --- :CsvViewStickyColumns 2
+      --- @type integer
+      count = 1,
     },
   },
 

@@ -94,6 +94,45 @@ function View:render_lines(top_lnum, bot_lnum)
   end
 end
 
+--- Display width of the first `count` columns, delimiters included.
+---
+--- Mirrors the padding rules of `_render_field`: each column occupies its width
+--- plus the configured spacing, and every column is followed by a delimiter.
+--- Returns nil while the metrics for those columns are still being computed.
+---@param count integer number of columns, counted from the left
+---@return integer? width
+function View:pinned_width(count)
+  local delimiter = (vim.b[self.bufnr].csvview_info or {}).delimiter ---@type { text: string }?
+  if not delimiter then
+    return nil
+  end
+
+  -- In border mode the delimiter is concealed by a single-cell border char.
+  local delimiter_width = self.opts.view.display_mode == "border" and 1 or vim.fn.strdisplaywidth(delimiter.text)
+
+  local spacing = self.opts.view.spacing
+  local width = 0
+  for column_index = 1, count do
+    local column = self.metrics:column(column_index)
+    if not column then
+      return nil -- not computed yet, or fewer columns than requested
+    end
+
+    local left, right ---@type integer, integer
+    if type(spacing) == "table" then
+      left = column_index == 1 and 0 or (spacing.left or 0)
+      right = spacing.right or 0
+    else
+      -- A number adds the same total spacing regardless of align direction.
+      left, right = 0, spacing
+    end
+
+    width = width + math.max(column.max_width, self.opts.view.min_column_width) + left + right + delimiter_width
+  end
+
+  return width
+end
+
 --- Setup window options
 --- @param winid integer
 function View:setup_window(winid)

@@ -58,6 +58,16 @@ local cmdline = Cmdline:new({
     end,
     candidates = { "none", "auto", "" },
   },
+  {
+    name = "sticky_columns",
+    ---@param options CsvView.Options
+    ---@param value string
+    set = function(options, value)
+      local count = tonumber(value) or 0
+      options.view.sticky_columns = { enabled = count >= 1, count = math.max(count, 1) }
+    end,
+    candidates = { "0", "1", "2", "3" },
+  },
 })
 
 local function create_empty_opts()
@@ -76,6 +86,17 @@ end, {
   nargs = "?",
   complete = function(arg_lead, cmd_line, cursor_pos)
     return cmdline:complete(arg_lead, cmd_line, cursor_pos)
+  end,
+})
+
+vim.api.nvim_create_user_command("CsvViewStickyColumns", function(opts)
+  local count = tonumber(opts.args) or 1
+  csvview.set_sticky_columns(vim.api.nvim_get_current_buf(), count)
+end, {
+  desc = "[csvview] Pin the leftmost N columns (0 to unpin)",
+  nargs = "?",
+  complete = function()
+    return { "0", "1", "2", "3" }
   end,
 })
 
