@@ -101,19 +101,6 @@ end, {
   end,
 })
 
-vim.api.nvim_create_user_command("CsvViewStickyColumns", function(opts)
-  local count = tonumber(opts.args) or 1
-  csvview.update(vim.api.nvim_get_current_buf(), {
-    view = { sticky_columns = { enabled = count >= 1, count = math.max(count, 1) } },
-  })
-end, {
-  desc = "[csvview] Pin the leftmost N columns (0 to unpin)",
-  nargs = "?",
-  complete = function()
-    return { "0", "1", "2", "3" }
-  end,
-})
-
 vim.api.nvim_create_user_command("CsvViewDisable", function()
   csvview.disable()
 end, {

@@ -164,14 +164,14 @@ describe("sticky_columns", function()
     assert.are.equal(3, vim.api.nvim_get_option_value("sidescrolloff", { win = winid, scope = "local" }))
   end)
 
-  it("CsvViewStickyColumns retunes an attached view", function()
+  it("CsvViewUpdate retunes an attached view", function()
     vim.cmd("runtime! plugin/csvview.lua") -- tests run with --noplugin
     local bufnr = vim.api.nvim_get_current_buf()
     csvview.enable(bufnr, { view = { sticky_columns = { enabled = false, count = 1 } } })
     vim.wait(50)
 
     vim.fn.winrestview({ topline = 10, lnum = 15, leftcol = 40, col = 60 })
-    vim.cmd("CsvViewStickyColumns 2")
+    vim.cmd("CsvViewUpdate sticky_columns=2")
     vim.wait(20)
     should_show_sticky_columns()
 
@@ -179,7 +179,7 @@ describe("sticky_columns", function()
     assert(view)
     assert.are.equal(2, view.opts.view.sticky_columns.count)
 
-    vim.cmd("CsvViewStickyColumns 0")
+    vim.cmd("CsvViewUpdate sticky_columns=0")
     vim.wait(20)
     should_not_show_sticky_columns()
 

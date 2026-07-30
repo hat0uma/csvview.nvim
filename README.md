@@ -241,7 +241,7 @@ end)
       --- You can also specify it on the command line.
       --- e.g:
       --- :CsvViewEnable sticky_columns=2
-      --- :CsvViewStickyColumns 2
+      --- :CsvViewUpdate sticky_columns=2
       --- @type integer
       count = 1,
 
@@ -302,7 +302,6 @@ end)
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
 | `:CsvViewInfo`             | Display buffer statistics (delimiter, header, dimensions) |
 | `:CsvViewUpdate [options]` | Change options of an enabled buffer               |
-| `:CsvViewStickyColumns [N]` | Pin the leftmost N columns of the attached buffer (`0` unpins) |
 
 #### Quick Start
 

@@ -242,12 +242,11 @@ Pin or unpin without editing the configuration:
 
 ```vim
 :CsvViewEnable sticky_columns=2  " When enabling the view
-:CsvViewStickyColumns 2          " On an already attached buffer
-:CsvViewStickyColumns 0          " Unpin
+:CsvViewUpdate sticky_columns=2  " On an already attached buffer
+:CsvViewUpdate sticky_columns=0  " Unpin
 ```
 
-`:CsvViewStickyColumns` is shorthand for `:CsvViewUpdate sticky_columns=2`, which
-changes any option on an enabled buffer:
+`:CsvViewUpdate` changes any option on an enabled buffer, not just this one:
 
 ```vim
 :CsvViewUpdate display_mode=border
