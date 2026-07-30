@@ -3,6 +3,7 @@ local win_overlay = require("csvview.win_overlay")
 local M = {}
 
 M._sticky_columns_wins = {} --- @type table<integer,integer> winid -> sticky-columns winid
+M._saved_sidescrolloff = {} --- @type table<integer,integer> winid -> 'sidescrolloff' before pinning
 
 --- Sync the vertical scroll of the sticky columns window with the main window.
 ---
@@ -60,19 +61,13 @@ local function show_sticky_columns(winid, view, width)
   vim.api.nvim_set_option_value("wrap", false, { win = columns_winid, scope = "local" })
 end
 
---- Width of the pinned region, or nil if sticky columns should not be shown.
+--- Width of the pinned region, or nil if this window has nothing to pin.
 ---@param winid integer
 ---@param view CsvView.View
 ---@return integer?
-local function sticky_columns_width(winid, view)
+local function pinned_width(winid, view)
   local opts = view.opts.view.sticky_columns
   if not opts.enabled or opts.count < 1 then
-    return nil
-  end
-
-  -- Nothing is scrolled out of view yet, the real columns are already in place.
-  local leftcol = vim.api.nvim_win_call(winid, vim.fn.winsaveview).leftcol
-  if leftcol <= 0 then
     return nil
   end
 
@@ -82,22 +77,61 @@ local function sticky_columns_width(winid, view)
     return nil
   end
 
-  -- The overlay is not focusable, so a cursor inside the pinned region would be
-  -- hidden underneath it. Give the cursor back to the user in that case.
-  local cursor_screen_col = vim.api.nvim_win_call(winid, vim.fn.wincol)
+  -- Never cover the whole window.
   local gutter = vim.fn.getwininfo(winid)[1].textoff or 0
-  if cursor_screen_col - gutter <= width then
-    return nil
+  return math.min(width, vim.api.nvim_win_get_width(winid) - gutter - 1)
+end
+
+--- Whether the overlay should currently be drawn.
+---
+--- Only when something is actually scrolled out of view: at `leftcol == 0` the real
+--- columns are already in place. The cursor cannot be caught behind the overlay,
+--- since 'sidescrolloff' keeps it to the right of the pinned region.
+---@param winid integer
+---@return boolean
+local function should_show(winid)
+  return vim.api.nvim_win_call(winid, vim.fn.winsaveview).leftcol > 0
+end
+
+--- Keep the cursor clear of the pinned region.
+---
+--- The overlay is not focusable, so a cursor underneath it would be invisible.
+--- 'sidescrolloff' is the native mechanism for this: it keeps the cursor that many
+--- columns away from the window edge, so horizontal scrolling still works normally
+--- and the cursor simply never ends up behind the overlay.
+---@param winid integer
+---@param width integer
+local function set_sidescrolloff(winid, width)
+  local opts = { win = winid, scope = "local" } ---@type vim.api.keyset.option
+  if M._saved_sidescrolloff[winid] == nil then
+    M._saved_sidescrolloff[winid] = vim.api.nvim_get_option_value("sidescrolloff", opts)
   end
 
-  -- Never cover the whole window.
-  local max_width = vim.api.nvim_win_get_width(winid) - gutter - 1
-  return math.min(width, max_width)
+  local wanted = width + 1
+  if vim.api.nvim_get_option_value("sidescrolloff", opts) ~= wanted then
+    vim.api.nvim_set_option_value("sidescrolloff", wanted, opts)
+  end
+end
+
+--- Restore the 'sidescrolloff' the window had before the overlay was shown.
+---@param winid integer
+local function restore_sidescrolloff(winid)
+  local saved = M._saved_sidescrolloff[winid]
+  if saved == nil then
+    return
+  end
+
+  M._saved_sidescrolloff[winid] = nil
+  if vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_set_option_value("sidescrolloff", saved, { win = winid, scope = "local" })
+  end
 end
 
 --- Close the sticky columns window of a csvview window
 ---@param winid integer
 function M.close_columns_win_for(winid)
+  restore_sidescrolloff(winid)
+
   local columns_win = M._sticky_columns_wins[winid]
   if not columns_win then
     return
@@ -120,12 +154,25 @@ end
 function M.redraw()
   for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local view = win_overlay.get_opened_csvview(winid)
-    local width = view and sticky_columns_width(winid, view)
-    if view and width then
-      show_sticky_columns(winid, view, width)
-      sync_vertical_scroll(winid, M._sticky_columns_wins[winid])
-    else
+    local width = view and pinned_width(winid, view)
+    if not width then
       M.close_columns_win_for(winid)
+    else
+      -- Reserve the room before the overlay is needed, so the cursor is never
+      -- caught behind it on the redraw that first scrolls the window.
+      set_sidescrolloff(winid, width)
+      if should_show(winid) then
+        show_sticky_columns(winid, view, width)
+        sync_vertical_scroll(winid, M._sticky_columns_wins[winid])
+      elseif M._sticky_columns_wins[winid] then
+        local columns_win = M._sticky_columns_wins[winid]
+        M._sticky_columns_wins[winid] = nil
+        vim.schedule(function()
+          if vim.api.nvim_win_is_valid(columns_win) then
+            pcall(vim.api.nvim_win_close, columns_win, true)
+          end
+        end)
+      end
     end
   end
 end

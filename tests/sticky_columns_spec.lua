@@ -55,13 +55,6 @@ describe("sticky_columns", function()
       assert = should_show_sticky_columns,
     },
     {
-      name = "hides when the cursor is inside the pinned region",
-      winview = { topline = 10, lnum = 15, leftcol = 20, col = 20 },
-      winopts = { { "sidescrolloff", 0 }, { "scrolloff", 0 } },
-      opts = { view = { sticky_columns = { enabled = true, count = 1 } } },
-      assert = should_not_show_sticky_columns,
-    },
-    {
       name = "syncs with the current window vertical scroll and pins leftcol at 0",
       winview = { topline = 10, lnum = 15, leftcol = 20, col = 40 },
       winopts = { { "sidescrolloff", 0 }, { "scrolloff", 0 } },
@@ -131,6 +124,26 @@ describe("sticky_columns", function()
       vim.api.nvim_set_option_value(opt[1], nil, { win = winid, scope = "local" })
     end
   end
+
+  it("reserves and restores 'sidescrolloff'", function()
+    local winid = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_option_value("sidescrolloff", 3, { win = winid, scope = "local" })
+
+    local bufnr = vim.api.nvim_get_current_buf()
+    csvview.enable(bufnr, { view = { sticky_columns = { enabled = true, count = 1 } } })
+    vim.wait(50)
+    require("csvview.sticky_columns").redraw()
+    vim.wait(20)
+
+    local view = require("csvview.view").get(bufnr)
+    assert(view)
+    local expected = view:pinned_width(1) + 1
+    assert.are.equal(expected, vim.api.nvim_get_option_value("sidescrolloff", { win = winid, scope = "local" }))
+
+    csvview.disable(bufnr)
+    vim.wait(20)
+    assert.are.equal(3, vim.api.nvim_get_option_value("sidescrolloff", { win = winid, scope = "local" }))
+  end)
 
   it("CsvViewStickyColumns retunes an attached view", function()
     vim.cmd("runtime! plugin/csvview.lua") -- tests run with --noplugin
