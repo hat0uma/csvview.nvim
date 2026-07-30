@@ -140,8 +140,11 @@ local function pinned_width(winid, view)
     return nil
   end
 
-  -- Never cover the whole text area.
-  return math.min(width, vim.api.nvim_win_get_width(winid) - gutter_width(winid) - 1)
+  -- Never take more than half the text area: the region is reserved with
+  -- 'sidescrolloff', which applies to both edges, so a wider one would leave the
+  -- window unable to scroll horizontally at all.
+  local text_width = vim.api.nvim_win_get_width(winid) - gutter_width(winid)
+  return math.min(width, math.floor(text_width / 2))
 end
 
 --- Whether the overlay should currently be drawn.

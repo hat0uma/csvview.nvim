@@ -89,18 +89,6 @@ end, {
   end,
 })
 
-vim.api.nvim_create_user_command("CsvViewUpdate", function(opts)
-  local bufnr = vim.api.nvim_get_current_buf()
-  local cmdopts = cmdline:parse(opts.args, create_empty_opts())
-  csvview.update(bufnr, cmdopts)
-end, {
-  desc = "[csvview] Change options of an enabled buffer",
-  nargs = "?",
-  complete = function(arg_lead, cmd_line, cursor_pos)
-    return cmdline:complete(arg_lead, cmd_line, cursor_pos)
-  end,
-})
-
 vim.api.nvim_create_user_command("CsvViewDisable", function()
   csvview.disable()
 end, {

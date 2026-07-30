@@ -98,7 +98,7 @@ describe("csvview", function()
   run_update_tests(require("tests.cases.buffer_update"))
   run_update_tests(require("tests.cases.buffer_update_multiline"))
 
-  describe("update", function()
+  describe("enable on an attached buffer", function()
     config.setup()
     csvview.setup()
 
@@ -120,7 +120,7 @@ describe("csvview", function()
 
     it("should apply view options to the attached view", function()
       local bufnr = enabled_buf({ view = { display_mode = "highlight" } })
-      csvview.update(bufnr, { view = { display_mode = "border" } })
+      csvview.enable(bufnr, { view = { display_mode = "border" } })
       vim.wait(50)
 
       local view = require("csvview.view").get(bufnr)
@@ -133,7 +133,7 @@ describe("csvview", function()
 
     it("should re-parse when a parser option changes", function()
       local bufnr = enabled_buf({ parser = { delimiter = "," } })
-      csvview.update(bufnr, { parser = { delimiter = ";" } })
+      csvview.enable(bufnr, { parser = { delimiter = ";" } })
       vim.wait(50)
 
       assert.is_true(csvview.is_enabled(bufnr))
@@ -147,19 +147,24 @@ describe("csvview", function()
       csvview.disable(bufnr)
     end)
 
-    it("should warn and do nothing when the buffer is not enabled", function()
-      local bufnr = vim.api.nvim_create_buf(false, true)
+    it("should keep the view when enabling again without options", function()
+      local bufnr = enabled_buf()
+      local view = require("csvview.view").get(bufnr)
+
       local notified = false
       local notify = vim.notify
       vim.notify = function() ---@diagnostic disable-line: duplicate-set-field
         notified = true
       end
 
-      csvview.update(bufnr, { view = { display_mode = "border" } })
+      csvview.enable(bufnr)
+      vim.wait(50)
       vim.notify = notify ---@diagnostic disable-line: duplicate-set-field
 
-      assert.is_true(notified)
-      assert.is_false(csvview.is_enabled(bufnr))
+      assert.is_false(notified)
+      assert.are.equal(view, require("csvview.view").get(bufnr))
+
+      csvview.disable(bufnr)
     end)
   end)
 end)

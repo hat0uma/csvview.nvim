@@ -21,7 +21,39 @@ function M.is_enabled(bufnr)
   return views.get(bufnr) ~= nil
 end
 
+--- Apply options to an already attached buffer.
+---
+--- View options only need the view re-rendered. Parser options decide how the
+--- buffer is split into fields, so changing one re-parses it, which is a disable
+--- and enable round trip.
+---@param bufnr integer
+---@param view CsvView.View
+---@param opts CsvView.Options
+local function reapply(bufnr, view, opts)
+  local merged = vim.tbl_deep_extend("force", view.opts, opts) --[[@as CsvView.InternalOptions]]
+  if not vim.deep_equal(merged.parser, view.opts.parser) then
+    M.disable(bufnr)
+    M.enable(bufnr, merged)
+    return
+  end
+
+  view.opts = merged
+  view:clear()
+  for _, winid in ipairs(util.buf_tabpage_win_find(0, bufnr)) do
+    view:setup_window(winid) -- `display_mode` decides the conceal options
+  end
+
+  vim.b[bufnr].csvview_refresh_requested = true
+  sticky_header.redraw()
+  sticky_columns.redraw()
+end
+
 --- enable csv table view
+---
+--- On a buffer that is already enabled, `opts` is applied to it instead: the
+--- options are merged over the ones the buffer currently uses, view options are
+--- re-applied to the attached view, and parser options, which decide how the
+--- buffer is split into fields, re-parse it.
 ---@param bufnr integer?
 ---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
@@ -30,12 +62,13 @@ function M.enable(bufnr, opts)
   end
 
   bufnr = util.resolve_bufnr(bufnr)
-  opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
-  if M.is_enabled(bufnr) then
-    vim.notify("csvview: already enabled for this buffer.")
-    return
+  local attached = views.get(bufnr)
+  if attached then
+    return reapply(bufnr, attached, opts or {})
   end
+
+  opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
   local quote_char, quote_char_detected, quote_char_scores = util.resolve_quote_char(bufnr, opts)
   local delimiter, delimiter_detected, delimiter_scores = util.resolve_delimiter(bufnr, opts, quote_char)
@@ -194,40 +227,6 @@ function M.toggle(bufnr, opts)
   else
     M.enable(bufnr, opts)
   end
-end
-
---- Change options of an already enabled buffer.
----
---- `opts` is merged over the options the buffer was enabled with. View options are
---- re-applied to the attached view and the buffer is re-rendered. Parser options
---- decide how the buffer is split into fields, so changing one re-parses the buffer,
---- which is a disable and enable round trip.
----@param bufnr integer?
----@param opts CsvView.Options
-function M.update(bufnr, opts)
-  bufnr = util.resolve_bufnr(bufnr)
-  local view = views.get(bufnr)
-  if not view then
-    vim.notify("csvview: not enabled for this buffer.")
-    return
-  end
-
-  local merged = vim.tbl_deep_extend("force", view.opts, opts) --[[@as CsvView.InternalOptions]]
-  if not vim.deep_equal(merged.parser, view.opts.parser) then
-    M.disable(bufnr)
-    M.enable(bufnr, merged)
-    return
-  end
-
-  view.opts = merged
-  view:clear()
-  for _, winid in ipairs(util.buf_tabpage_win_find(0, bufnr)) do
-    view:setup_window(winid) -- `display_mode` decides the conceal options
-  end
-
-  vim.b[bufnr].csvview_refresh_requested = true
-  sticky_header.redraw()
-  sticky_columns.redraw()
 end
 
 --- Register autocmds

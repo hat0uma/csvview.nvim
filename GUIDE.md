@@ -241,16 +241,16 @@ in a spreadsheet. The remaining columns slide underneath them.
 Pin or unpin without editing the configuration:
 
 ```vim
-:CsvViewEnable sticky_columns=2  " When enabling the view
-:CsvViewUpdate sticky_columns=2  " On an already attached buffer
-:CsvViewUpdate sticky_columns=0  " Unpin
+:CsvViewEnable sticky_columns=2  " Pin two columns
+:CsvViewEnable sticky_columns=0  " Unpin
 ```
 
-`:CsvViewUpdate` changes any option on an enabled buffer, not just this one:
+`:CsvViewEnable` applies its options to a buffer that is already enabled, so any
+option can be changed without disabling the view first:
 
 ```vim
-:CsvViewUpdate display_mode=border
-:CsvViewUpdate delimiter=; header_lnum=1
+:CsvViewEnable display_mode=border
+:CsvViewEnable delimiter=; header_lnum=1
 ```
 
 When a sticky header is displayed, the header cells of the pinned columns stay in
