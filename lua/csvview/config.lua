@@ -15,6 +15,7 @@ local M = {}
 ---@field display_mode? CsvView.Options.View.DisplayMode
 ---@field header_lnum? integer|false|true
 ---@field sticky_header? CsvView.Options.View.StickyHeader
+---@field sticky_columns? CsvView.Options.View.StickyColumns
 ---@alias CsvView.Options.View.DisplayMode "highlight" | "border"
 
 ---@class CsvView.Options.View.Spacing
@@ -23,6 +24,11 @@ local M = {}
 
 ---@class CsvView.Options.View.StickyHeader
 ---@field enabled? boolean
+---@field separator? string|false
+
+---@class CsvView.Options.View.StickyColumns
+---@field enabled? boolean
+---@field count? integer
 ---@field separator? string|false
 
 ---@class CsvView.Options.Keymaps
@@ -177,6 +183,30 @@ M.defaults = {
       --- @type string|false
       separator = "─",
     },
+
+    --- The sticky columns feature settings
+    --- Keeps the leftmost columns in place while scrolling horizontally,
+    --- like frozen panes in a spreadsheet.
+    sticky_columns = {
+      --- Whether to enable the sticky columns feature
+      --- @type boolean
+      enabled = false,
+
+      --- Number of columns to pin, counted from the left.
+      --- You can also specify it on the command line.
+      --- e.g:
+      --- :CsvViewEnable sticky_columns=2
+      --- @type integer
+      count = 1,
+
+      --- The separator character drawn at the right edge of the pinned columns,
+      --- where the scrolling columns pass underneath.
+      --- Off by default: with `display_mode = "border"` the pinned columns already
+      --- end in a delimiter there, and a separator would double it.
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = false,
+    },
   },
 
   --- Keymaps for csvview.
@@ -291,6 +321,7 @@ local HL = {
   Comment = "CsvViewComment",
   HeaderLine = "CsvViewHeaderLine",
   StickyHeaderSeparator = "CsvViewStickyHeaderSeparator",
+  StickyColumnsSeparator = "CsvViewStickyColumnsSeparator",
   -- use built-in csv syntax highlight group.
   Col0 = "CsvViewCol0",
   Col1 = "CsvViewCol1",
@@ -323,6 +354,7 @@ M._highlight_links = {
   [HL.Comment] = "Comment",
   [HL.HeaderLine] = false,
   [HL.StickyHeaderSeparator] = "Delimiter",
+  [HL.StickyColumnsSeparator] = "Delimiter",
   [HL.Col0] = "csvCol0",
   [HL.Col1] = "csvCol1",
   [HL.Col2] = "csvCol2",

@@ -228,6 +228,30 @@ end)
       --- @type string|false
       separator = "─",
     },
+
+    --- The sticky columns feature settings
+    --- Keeps the leftmost columns in place while scrolling horizontally,
+    --- like frozen panes in a spreadsheet.
+    sticky_columns = {
+      --- Whether to enable the sticky columns feature
+      --- @type boolean
+      enabled = false,
+
+      --- Number of columns to pin, counted from the left.
+      --- You can also specify it on the command line.
+      --- e.g:
+      --- :CsvViewEnable sticky_columns=2
+      --- @type integer
+      count = 1,
+
+      --- The separator character drawn at the right edge of the pinned columns,
+      --- where the scrolling columns pass underneath.
+      --- Off by default: with `display_mode = "border"` the pinned columns already
+      --- end in a delimiter there, and a separator would double it.
+      --- set `false` to disable the separator
+      --- @type string|false
+      separator = false,
+    },
   },
 
   --- Keymaps for csvview.
@@ -272,7 +296,7 @@ end)
 
 | Command                    | Description                                      |
 |----------------------------|--------------------------------------------------|
-| `:CsvViewEnable [options]` | Enable CSV view with the specified options      |
+| `:CsvViewEnable [options]` | Enable CSV view with the specified options, or apply them to an already enabled buffer |
 | `:CsvViewDisable`          | Disable CSV view                                 |
 | `:CsvViewToggle [options]` | Toggle CSV view with the specified options      |
 | `:CsvViewInfo`             | Display buffer statistics (delimiter, header, dimensions) |
@@ -307,6 +331,7 @@ The plugin uses the following highlight groups for customizing colors and appear
 | `CsvViewDelimiter`               | links to `Comment`         | Delimiter highlighting           |
 | `CsvViewComment`                 | links to `Comment`         | Comment line highlighting        |
 | `CsvViewStickyHeaderSeparator`   | links to `CsvViewDelimiter`| Sticky header separator          |
+| `CsvViewStickyColumnsSeparator`  | links to `CsvViewDelimiter`| Sticky columns separator         |
 | `CsvViewHeaderLine`              | -                          | Header line highlighting         |
 | `CsvViewCol0` to `CsvViewCol8`   | links to `csvCol0`-`csvCol8`| Column-based highlighting       |
 | `CsvViewInfoTitle`               | links to `Title`           | Info window title                |

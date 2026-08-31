@@ -1,6 +1,7 @@
 local M = {}
 
 local CsvView = require("csvview.view").View
+local sticky_columns = require("csvview.sticky_columns")
 local sticky_header = require("csvview.sticky_header")
 local views = require("csvview.view")
 
@@ -20,7 +21,39 @@ function M.is_enabled(bufnr)
   return views.get(bufnr) ~= nil
 end
 
+--- Apply options to an already attached buffer.
+---
+--- View options only need the view re-rendered. Parser options decide how the
+--- buffer is split into fields, so changing one re-parses it, which is a disable
+--- and enable round trip.
+---@param bufnr integer
+---@param view CsvView.View
+---@param opts CsvView.Options
+local function reapply(bufnr, view, opts)
+  local merged = vim.tbl_deep_extend("force", view.opts, opts) --[[@as CsvView.InternalOptions]]
+  if not vim.deep_equal(merged.parser, view.opts.parser) then
+    M.disable(bufnr)
+    M.enable(bufnr, merged)
+    return
+  end
+
+  view.opts = merged
+  view:clear()
+  for _, winid in ipairs(util.buf_tabpage_win_find(0, bufnr)) do
+    view:setup_window(winid) -- `display_mode` decides the conceal options
+  end
+
+  vim.b[bufnr].csvview_refresh_requested = true
+  sticky_header.redraw()
+  sticky_columns.redraw()
+end
+
 --- enable csv table view
+---
+--- On a buffer that is already enabled, `opts` is applied to it instead: the
+--- options are merged over the ones the buffer currently uses, view options are
+--- re-applied to the attached view, and parser options, which decide how the
+--- buffer is split into fields, re-parse it.
 ---@param bufnr integer?
 ---@param opts CsvView.Options?
 function M.enable(bufnr, opts)
@@ -29,12 +62,13 @@ function M.enable(bufnr, opts)
   end
 
   bufnr = util.resolve_bufnr(bufnr)
-  opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
-  if M.is_enabled(bufnr) then
-    vim.notify("csvview: already enabled for this buffer.")
-    return
+  local attached = views.get(bufnr)
+  if attached then
+    return reapply(bufnr, attached, opts or {})
   end
+
+  opts = config.get(opts) ---@diagnostic disable-line: cast-local-type
 
   local quote_char, quote_char_detected, quote_char_scores = util.resolve_quote_char(bufnr, opts)
   local delimiter, delimiter_detected, delimiter_scores = util.resolve_delimiter(bufnr, opts, quote_char)
@@ -141,6 +175,7 @@ function M.enable(bufnr, opts)
     metrics:clear()
     keymap.unregister(opts)
     sticky_header.redraw()
+    sticky_columns.redraw()
     vim.bo[bufnr].syntax = orig_syntax
     vim.b[bufnr].csvview_info = nil
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewDetach", data = bufnr })
@@ -160,6 +195,7 @@ function M.enable(bufnr, opts)
     keymap.register(opts)
     views.attach(bufnr, view)
     sticky_header.redraw()
+    sticky_columns.redraw()
     vim.cmd([[redraw!]])
     vim.api.nvim_exec_autocmds("User", { pattern = "CsvViewAttach", data = bufnr })
   end)
@@ -240,20 +276,27 @@ function M.setup(opts)
   -- Register autocmds
   local group = vim.api.nvim_create_augroup("csvview", {})
   register_autocmds({
-    { -- `CursorMoved` is necessary to hide the sticky header when cursor overlaps the header.
+    { -- `CursorMoved` is necessary to hide the overlays when the cursor is underneath them.
       event = { "WinEnter", "WinScrolled", "WinResized", "VimResized", "CursorMoved" },
-      callback = sticky_header.redraw,
+      callback = function()
+        sticky_header.redraw()
+        sticky_columns.redraw()
+      end,
     },
     {
       event = "OptionSet",
       pattern = { "number", "relativenumber", "numberwidth", "signcolumn", "foldcolumn" },
-      callback = sticky_header.redraw,
+      callback = function()
+        sticky_header.redraw()
+        sticky_columns.redraw()
+      end,
     },
     {
       event = "WinClosed",
       callback = function(args)
         local winid = assert(tonumber(args.match))
         sticky_header.close_header_win_for(winid)
+        sticky_columns.close_columns_win_for(winid)
       end,
     },
     { -- Detach view when the buffer is deleted
