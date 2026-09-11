@@ -52,6 +52,52 @@ function M.yield_next_loop(thread)
   coroutine.yield()
 end
 
+local FEEDKEYS_DONE_KEY = "<Plug>(csvview-test-feedkeys-done)"
+
+--- Feed keys as if typed by the user, and wait until they are processed.
+---
+--- `nvim_feedkeys(keys, "x")` cannot be used here because keys executed that way
+--- never reach the main loop, so the multicursor cascade is not replayed.
+--- (see `:h multicursor`)
+---@async
+---@param thread thread
+---@param keys string keys in `:h key-notation`
+function M.feedkeys(thread, keys)
+  local done = false
+  vim.keymap.set("n", FEEDKEYS_DONE_KEY, function()
+    done = true
+  end)
+
+  -- The marker key is processed after all the keys before it, including the cascade.
+  vim.api.nvim_feedkeys(vim.keycode(keys) .. vim.keycode(FEEDKEYS_DONE_KEY), "t", false)
+
+  local wait_ms = 0
+  while not done and wait_ms < 5000 do
+    vim.defer_fn(function()
+      coroutine.resume(thread)
+    end, 10)
+    coroutine.yield()
+    wait_ms = wait_ms + 10
+  end
+
+  vim.keymap.del("n", FEEDKEYS_DONE_KEY)
+  if not done then
+    error(string.format("testutil.feedkeys: timed out while processing keys '%s'", keys))
+  end
+end
+
+--- Get the positions of the multicursors in the buffer.
+---@param bufnr integer
+---@return [integer,integer][] positions 1-based line number and 0-based byte offset
+function M.get_multicursors(bufnr)
+  local ns = vim.api.nvim_create_namespace("nvim.multicursor")
+  local positions = {} ---@type [integer,integer][]
+  for _, extmark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, {})) do
+    table.insert(positions, { extmark[2] + 1, extmark[3] })
+  end
+  return positions
+end
+
 --- Read lines from a file and return them as a table.
 ---@param filename string
 ---@return string[]

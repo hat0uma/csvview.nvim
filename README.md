@@ -14,6 +14,7 @@ A comfortable CSV/TSV editing plugin for Neovim.
 - Sticky Headers
 - Auto-Detection of Delimiters and Headers
 - Text Objects & Motions
+- Column-wide editing with the built-in multicursor (Neovim v0.13+)
 - Two Display Modes:
   - `highlight`: Highlights delimiters.
   - `border`: Uses a vertical border (`│`) as delimiters.
@@ -53,6 +54,11 @@ Install the plugin using your favorite package manager.
       -- Text objects for selecting fields
       textobject_field_inner = { "if", mode = { "o", "x" } },
       textobject_field_outer = { "af", mode = { "o", "x" } },
+      -- Text objects for selecting columns. (requires Neovim 0.13+)
+      -- These place a multicursor on every row of the column, so `cic` edits the whole column at once.
+      -- See GUIDE.md for the Visual mode caveat.
+      textobject_column_inner = { "ic", mode = { "o", "x" } },
+      textobject_column_outer = { "ac", mode = { "o", "x" } },
       -- Excel-like navigation:
       -- Use <Tab> and <S-Tab> to move horizontally between fields.
       -- Use <Enter> and <S-Enter> to move vertically between rows and place the cursor at the end of the field.
@@ -263,6 +269,12 @@ end)
   ---   -- Text objects for selecting fields
   ---   textobject_field_inner = { "if", mode = { "o", "x" } },
   ---   textobject_field_outer = { "af", mode = { "o", "x" } },
+  ---
+  ---   -- Text objects for selecting columns. (requires Neovim 0.13+)
+  ---   -- These place a multicursor on every row of the column, so that
+  ---   -- a single operation edits the whole column. e.g. `cic`, `dic`
+  ---   textobject_column_inner = { "ic", mode = { "o", "x" } },
+  ---   textobject_column_outer = { "ac", mode = { "o", "x" } },
   ---
   ---   -- Excel-like navigation:
   ---   -- Use <Tab> and <S-Tab> to move horizontally between fields.

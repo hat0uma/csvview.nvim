@@ -170,4 +170,196 @@ describe("textobject", function()
 
     run_multiline_tests(multiline_cases)
   end)
+
+  describe("column", function()
+    local testutil = require("tests.testutil")
+
+    -- The column text object is built on the built-in multicursor feature.
+    if not vim.api.nvim_mcursor then
+      it("skipped: the column text object requires Neovim 0.13 or later", function() end)
+      return
+    end
+
+    ---@type CsvView.Options
+    local opts = {
+      parser = { comments = { "#" }, delimiter = "," },
+      view = { header_lnum = 1 },
+    }
+
+    ---@type string[]
+    local lines = {
+      "name,age,city",
+      "alice,20,NY",
+      "# comment",
+      "",
+      "bob,31,LA",
+      "carol,42",
+    }
+
+    --- Open a buffer with csvview enabled and map the column text object to `ic`.
+    ---@async
+    ---@param buflines string[]
+    ---@param textobject_opts { include_delimiter?: boolean, include_header?: boolean }
+    ---@param csvview_opts CsvView.Options
+    ---@return integer bufnr
+    local function setup_buffer(buflines, textobject_opts, csvview_opts)
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, buflines)
+      vim.api.nvim_win_set_buf(0, bufnr)
+
+      local co = coroutine.running()
+      csvview.enable(bufnr, csvview_opts)
+      testutil.yield_next_loop(co)
+
+      vim.keymap.set({ "o", "x" }, "ic", function()
+        textobject.column(bufnr, textobject_opts)
+      end, { buffer = bufnr })
+
+      return bufnr
+    end
+
+    before_each(function()
+      -- Multicursors are per-buffer, but make sure no session leaks into the next test.
+      pcall(vim.api.nvim_buf_clear_namespace, 0, vim.api.nvim_create_namespace("nvim.multicursor"), 0, -1)
+    end)
+
+    it("places a cursor on each row of the column and edits them at once", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      assert.are.same({
+        "name,age,city", -- the header row is not edited by default
+        "alice,X,NY",
+        "# comment", -- comment lines have no field
+        "", -- empty lines have no field
+        "bob,X,LA",
+        "carol,X",
+      }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("skips rows that do not have the column", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 9 }) -- "NY" of the city column
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      assert.are.same({
+        "name,age,city",
+        "alice,20,X",
+        "# comment",
+        "",
+        "bob,31,X",
+        "carol,42", -- this row has no third column
+      }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("includes the header row when `include_header` is set", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false, include_header = true }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      assert.are.same({
+        "name,X,city",
+        "alice,X,NY",
+        "# comment",
+        "",
+        "bob,X,LA",
+        "carol,X",
+      }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("deletes the delimiter of each row when `include_delimiter` is set", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = true }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      testutil.feedkeys(co, "dic")
+
+      assert.are.same({
+        "name,age,city",
+        "alice,NY",
+        "# comment",
+        "",
+        "bob,LA",
+        "carol", -- the last column takes the delimiter before it
+      }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("places a cursor at the start of the field of each row", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      testutil.feedkeys(co, "yic")
+
+      -- The primary cursor covers row 2, the header row is excluded.
+      assert.are.same({ { 5, 4 }, { 6, 6 } }, testutil.get_multicursors(bufnr))
+      assert.are.same(lines, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("selects only the field under the cursor when invoked from visual mode", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      -- Neovim replays a visual sequence as keys, and the selection of this text object
+      -- cannot be replayed, so the other rows must not get a cursor here.
+      testutil.feedkeys(co, "vicy")
+
+      assert.are.same({}, testutil.get_multicursors(bufnr))
+      assert.are.same("20", vim.fn.getreg('"'))
+    end)
+
+    it("re-targets the cursors when invoked on another column", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 2, 6 }) -- "20" of the age column
+      testutil.feedkeys(co, "yic")
+      vim.api.nvim_win_set_cursor(0, { 2, 0 }) -- "alice" of the name column
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      assert.are.same({
+        "name,age,city",
+        "X,20,NY",
+        "# comment",
+        "",
+        "X,31,LA",
+        "X,42",
+      }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end)
+
+    it("does nothing on a comment line", function()
+      local co = coroutine.running()
+      local bufnr = setup_buffer(lines, { include_delimiter = false }, opts)
+
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      assert.are.same(lines, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+      assert.are.same({}, testutil.get_multicursors(bufnr))
+    end)
+
+    it("handles multi-line fields", function()
+      local co = coroutine.running()
+      local buflines = testutil.readlines("tests/fixtures/multiline.csv")
+      local bufnr = setup_buffer(buflines, { include_delimiter = false }, {
+        parser = { comments = { "#" }, delimiter = "," },
+        view = { header_lnum = 2 },
+      })
+
+      vim.api.nvim_win_set_cursor(0, { 3, 4 }) -- `"John Doe"` of the Name column
+      testutil.feedkeys(co, "cicX<Esc>")
+
+      local result = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      assert.are.same('1,X,"123 Main St', result[3])
+      assert.are.same('2,X,"456 Oak Ave', result[10])
+    end)
+  end)
 end)

@@ -34,6 +34,8 @@ local M = {}
 ---@class CsvView.Options.Keymaps
 ---@field textobject_field_inner? CsvView.Keymap
 ---@field textobject_field_outer? CsvView.Keymap
+---@field textobject_column_inner? CsvView.Keymap
+---@field textobject_column_outer? CsvView.Keymap
 ---@field jump_next_field_start? CsvView.Keymap
 ---@field jump_prev_field_start? CsvView.Keymap
 ---@field jump_next_field_end? CsvView.Keymap
@@ -219,6 +221,12 @@ M.defaults = {
   ---   textobject_field_inner = { "if", mode = { "o", "x" } },
   ---   textobject_field_outer = { "af", mode = { "o", "x" } },
   ---
+  ---   -- Text objects for selecting columns. (requires Neovim 0.13+)
+  ---   -- These place a multicursor on every row of the column, so that
+  ---   -- a single operation edits the whole column. e.g. `cic`, `dic`
+  ---   textobject_column_inner = { "ic", mode = { "o", "x" } },
+  ---   textobject_column_outer = { "ac", mode = { "o", "x" } },
+  ---
   ---   -- Excel-like navigation:
   ---   -- Use <Tab> and <S-Tab> to move horizontally between fields.
   ---   -- Use <Enter> and <S-Enter> to move vertically between rows.
@@ -251,6 +259,22 @@ M.defaults = {
         require("csvview.textobject").field(0, { include_delimiter = true })
       end,
       desc = "[csvview] Select the current field with delimiter",
+      noremap = true,
+      silent = true,
+    },
+    textobject_column_inner = {
+      function()
+        require("csvview.textobject").column(0, { include_delimiter = false })
+      end,
+      desc = "[csvview] Select the current column",
+      noremap = true,
+      silent = true,
+    },
+    textobject_column_outer = {
+      function()
+        require("csvview.textobject").column(0, { include_delimiter = true })
+      end,
+      desc = "[csvview] Select the current column with delimiter",
       noremap = true,
       silent = true,
     },

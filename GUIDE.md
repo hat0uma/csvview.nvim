@@ -299,6 +299,58 @@ Navigate between fields and rows with familiar keyboard shortcuts:
 - `dif` - Delete field content
 - `caf` - Change entire field
 
+### Text Objects for Column Selection
+
+> [!NOTE]
+> This requires Neovim v0.13 or newer, which provides the built-in multicursor feature.
+> On older versions these text objects select only the field under the cursor.
+
+```lua
+{
+  keymaps = {
+    -- Select column content (inner)
+    textobject_column_inner = { "ic", mode = { "o", "x" } },
+
+    -- Select column including delimiter (outer)
+    textobject_column_outer = { "ac", mode = { "o", "x" } },
+  },
+}
+```
+
+These text objects place a multicursor (`:h multicursor`) on the field of every row in
+the column, so a single edit applies to the whole column.
+
+#### Usage Examples
+
+- `cic` - Change the content of every field in the column at once
+- `dic` - Delete the content of every field in the column
+- `dac` - Delete every field in the column together with its delimiter
+- `yic` - Yank the field under the cursor and place the cursors on the column without editing
+
+The cursors stay active after the edit, so subsequent normal-mode commands keep applying
+to the whole column. Press `<C-l>` to clear them, or `gQ` to restore them.
+
+> [!IMPORTANT]
+> Use these text objects with an operator (`cic`, `dic`, …). In Visual mode (`vic`) only the
+> field under the cursor is selected and no cursor is placed: Neovim replays a Visual sequence
+> as the keys that made it, and a selection made by a Lua callback cannot be replayed at the
+> other cursors.
+
+Comment lines, empty lines and rows that do not have the column are skipped. The header
+row is left untouched unless `include_header` is set:
+
+```lua
+{
+  actions = {
+    textobject_column_inner = {
+      function()
+        require("csvview.textobject").column(0, { include_header = true })
+      end,
+    },
+  },
+}
+```
+
 ### Custom Navigation
 
 ```lua
@@ -520,6 +572,13 @@ local textobj = require("csvview.textobject")
 -- Select current field
 textobj.field(bufnr, {
   include_delimiter = false,    -- Include surrounding delimiter
+})
+
+-- Select current column (requires Neovim v0.13+)
+-- Places a multicursor on the field of every row in the column.
+textobj.column(bufnr, {
+  include_delimiter = false,    -- Include surrounding delimiter
+  include_header = false,       -- Also place a cursor on the header row
 })
 ```
 
