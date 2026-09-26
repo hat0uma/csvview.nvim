@@ -2,6 +2,7 @@ local EXTMARK_NS = vim.api.nvim_create_namespace("csv_extmark")
 local BORDER_CHAR = "│"
 
 local util = require("csvview.util")
+local KIND = require("csvview.metrics_store").KIND
 
 --- Set local option for window
 ---@param winid integer
@@ -45,16 +46,6 @@ local function get_spacing(spacing, align_direction)
   error("`view.spacing` expected integer or table.")
 end
 
---- Get column align direction
----@param field CsvView.Metrics.Field
----@return "right" | "left"
-local function get_align_direction(field)
-  if field.is_number then
-    return "right"
-  end
-  return "left"
-end
-
 --- create new view
 ---@param bufnr integer
 ---@param metrics CsvView.Metrics
@@ -96,7 +87,7 @@ end
 
 --- Display width of the first `count` columns, delimiters included.
 ---
---- Mirrors the padding rules of `_render_field`: each column occupies its width
+--- Mirrors the padding rules of `_render_line`: each column occupies its width
 --- plus the configured spacing, and every column is followed by a delimiter.
 --- Returns nil while the metrics for those columns are still being computed.
 ---@param count integer number of columns, counted from the left
@@ -199,16 +190,15 @@ end
 
 --- Add virtual padding after the field text.
 ---@param lnum integer 1-indexed lnum
+---@param col integer 0-based column
 ---@param padding integer
----@param field CsvView.Metrics.Field
-function View:_pad_after_field(lnum, padding, field)
+function View:_pad_after(lnum, col, padding)
   if padding <= 0 then
     return
   end
 
-  local pad = { { string.rep(" ", padding) } }
-  self:_add_extmark(lnum, field.offset + field.len, {
-    virt_text = pad,
+  self:_add_extmark(lnum, col, {
+    virt_text = { { string.rep(" ", padding) } },
     virt_text_pos = "inline",
     right_gravity = true,
   })
@@ -216,16 +206,15 @@ end
 
 --- Add virtual padding before the field text.
 ---@param lnum integer 1-indexed lnum
+---@param col integer 0-based column
 ---@param padding integer
----@param field CsvView.Metrics.Field
-function View:_pad_before_field(lnum, padding, field)
+function View:_pad_before(lnum, col, padding)
   if padding <= 0 then
     return
   end
 
-  local pad = { { string.rep(" ", padding) } }
-  self:_add_extmark(lnum, field.offset, {
-    virt_text = pad,
+  self:_add_extmark(lnum, col, {
+    virt_text = { { string.rep(" ", padding) } },
     virt_text_pos = "inline",
     right_gravity = false,
   })
@@ -233,19 +222,17 @@ end
 
 --- Render delimiter char
 ---@param lnum integer 1-indexed lnum
----@param field CsvView.Metrics.Field
----@param next_field CsvView.Metrics.Field
-function View:_render_delimiter(lnum, field, next_field)
-  local offset = field.offset + field.len
-  local end_col = next_field.offset
+---@param col integer 0-based start column
+---@param end_col integer 0-based end column
+function View:_render_delimiter(lnum, col, end_col)
   if self.opts.view.display_mode == "border" then
-    self:_add_extmark(lnum, offset, {
+    self:_add_extmark(lnum, col, {
       hl_group = "CsvViewDelimiter",
       end_col = end_col,
       conceal = BORDER_CHAR,
     })
   else
-    self:_add_extmark(lnum, offset, {
+    self:_add_extmark(lnum, col, {
       hl_group = "CsvViewDelimiter",
       end_col = end_col,
     })
@@ -258,73 +245,6 @@ function View:_highlight_comment(lnum)
   self:_add_extmark(lnum, 0, { hl_group = "CsvViewComment", end_row = lnum, hl_eol = true })
 end
 
---- highlight field
----@param lnum integer 1-indexed lnum
----@param column_index integer 1-indexed column index
----@param field CsvView.Metrics.Field
-function View:_highlight_field(lnum, column_index, field)
-  -- highlight field
-  self:_add_extmark(lnum, field.offset, {
-    hl_group = "CsvViewCol" .. (column_index - 1) % 9,
-    end_col = field.offset + field.len,
-  })
-end
-
---- Render field in line
----@param lnum integer 1-indexed lnum
----@param column_index 1-indexed column index
----@param field CsvView.Metrics.Field
-function View:_render_field(lnum, column_index, field)
-  local column = self.metrics:column(column_index)
-  if not column then
-    -- not computed yet.
-    return
-  end
-
-  -- Highlight column
-  if self:_field_terminated(lnum, column_index) then
-    self:_highlight_field(lnum, column_index, field)
-  end
-
-  -- Calculate padding
-  local colwidth = math.max(column.max_width, self.opts.view.min_column_width)
-  local align_direction = get_align_direction(field)
-  local spacing_left, spacing_right = get_spacing(self.opts.view.spacing, align_direction)
-  local align_padding = colwidth - field.display_width
-
-  -- Keep the delimiter position stable across rows by splitting padding into
-  -- alignment padding and delimiter spacing.
-  --
-  -- `align_padding` is part of the column width. It goes before right-aligned
-  -- fields and after left-aligned fields, so mixed number/text rows still end
-  -- at the same delimiter column.
-  --
-  -- `spacing_left` represents the visual gap after the previous delimiter.
-  -- The first field on a line has no previous delimiter, so table-style
-  -- spacing should not add a leading gap there.
-  local before_padding = spacing_left
-  local after_padding = spacing_right
-  local is_first_field = field.offset == 0
-  if type(self.opts.view.spacing) == "table" and is_first_field then
-    before_padding = 0
-  end
-  if align_direction == "right" then
-    before_padding = before_padding + align_padding
-  else
-    after_padding = after_padding + align_padding
-  end
-
-  -- Add padding
-  self:_pad_before_field(lnum, before_padding, field)
-  self:_pad_after_field(lnum, after_padding, field)
-
-  -- if column is last, do not render delimiter
-  local next_field = self.metrics:row({ lnum = lnum }):field(column_index + 1)
-  if next_field then
-    self:_render_delimiter(lnum, field, next_field)
-  end
-end
-
 --- Check if line is already rendered
 ---@param lnum integer 1-indexed lnum
 ---@return boolean
@@ -335,17 +255,18 @@ end
 --- Render line
 ---@param lnum integer 1-indexed lnum
 function View:_render_line(lnum)
-  local row = self.metrics:row({ lnum = lnum })
-  if not row then
+  local store = self.metrics.store
+  if not store:has_line(lnum) then
     return
   end
+  local kind = store.kind[lnum]
 
   -- Do not render if already rendered.
   if self:_already_rendered(lnum) then
     return
   end
 
-  if row.type == "comment" then
+  if kind == KIND.COMMENT then
     self:_highlight_comment(lnum)
     return
   end
@@ -356,61 +277,90 @@ function View:_render_line(lnum)
   end
 
   -- Add padding for multiline continuation rows
-  if row.type == "multiline_continuation" then
-    local padlen = self:_calculate_padding_for_multiline(lnum, row)
-    local pad = { { string.rep(" ", padlen) } }
-    self:_add_extmark(lnum, 0, {
-      virt_text = pad,
-      virt_text_pos = "inline",
-      right_gravity = false,
-    })
+  if kind == KIND.MULTILINE_CONTINUATION then
+    local padlen = self:_calculate_padding_for_multiline(lnum, store.col0[lnum])
+    self:_pad_before(lnum, 0, padlen)
   end
 
-  -- render fields
-  for column_index, field in row:iter() do
-    local ok, err = xpcall(self._render_field, util.wrap_stacktrace, self, lnum, column_index, field)
-    if not ok then
-      util.error_with_context(err, { lnum = lnum, column_index = column_index })
+  -- The last field of an unterminated record is not highlighted.
+  local unterminated_col = 0
+  if kind ~= KIND.SINGLELINE and store.term[lnum] == 0 then
+    local end_lnum = lnum + store.span[lnum]
+    assert(store:has_line(end_lnum), "record end out of range")
+    unterminated_col = store.col0[end_lnum] + store.count[end_lnum]
+  end
+
+  local view_opts = self.opts.view
+  local min_width = view_opts.min_column_width
+  local spacing = view_opts.spacing
+  local spacing_is_table = type(spacing) == "table"
+  local left_l, right_l = get_spacing(spacing, "left")
+  local left_r, right_r = get_spacing(spacing, "right")
+
+  local base, count, col0 = store.base[lnum], store.count[lnum], store.col0[lnum]
+  for i = 0, count - 1 do
+    local column_index = col0 + i + 1
+    local column = self.metrics:column(column_index)
+    if column then
+      local idx = base + i
+      local offset = store.off[idx]
+      local end_col = offset + store.len[idx]
+
+      -- Highlight column
+      if column_index ~= unterminated_col then
+        self:_add_extmark(lnum, offset, {
+          hl_group = "CsvViewCol" .. (column_index - 1) % 9,
+          end_col = end_col,
+        })
+      end
+
+      -- Keep the delimiter position stable across rows by splitting padding into
+      -- alignment padding and delimiter spacing.
+      --
+      -- `align_padding` is part of the column width. It goes before right-aligned
+      -- fields and after left-aligned fields, so mixed number/text rows still end
+      -- at the same delimiter column.
+      --
+      -- `spacing_left` represents the visual gap after the previous delimiter.
+      -- The first field on a line has no previous delimiter, so table-style
+      -- spacing should not add a leading gap there.
+      local align_padding = math.max(column.max_width, min_width) - store.width[idx]
+      local before_padding, after_padding ---@type integer, integer
+      if store.num[idx] == 1 then
+        before_padding, after_padding = left_r, right_r
+      else
+        before_padding, after_padding = left_l, right_l
+      end
+      if spacing_is_table and offset == 0 then
+        before_padding = 0
+      end
+      if store.num[idx] == 1 then
+        before_padding = before_padding + align_padding
+      else
+        after_padding = after_padding + align_padding
+      end
+
+      self:_pad_before(lnum, offset, before_padding)
+      self:_pad_after(lnum, end_col, after_padding)
+
+      -- if column is last, do not render delimiter
+      if i + 1 < count then
+        self:_render_delimiter(lnum, end_col, store.off[idx + 1])
+      end
     end
   end
-end
-
---- Check if the field is terminated.
---- This is used to determine if a quoted field is properly closed.
----@param lnum integer 1-indexed lnum
----@param column_index integer 1-indexed column index
----@return boolean
-function View:_field_terminated(lnum, column_index)
-  local row = self.metrics:row({ lnum = lnum })
-  if not row then
-    return false
-  end
-
-  -- if row is not multiline, it is always terminated
-  if row.type ~= "multiline_start" and row.type ~= "multiline_continuation" then
-    return true
-  end
-
-  if row.terminated then
-    return true
-  end
-
-  local end_row = assert(self.metrics:row({ lnum = lnum + row.end_loffset }))
-  assert(end_row.type == "multiline_continuation")
-  local last_field_index = end_row.skipped_ncol + end_row:field_count()
-  return column_index ~= last_field_index
 end
 
 --- Calculate padding for multiline row
 --- This is used to align multiline continuation rows with the first row.
 --- @param lnum integer 1-indexed line number
---- @param row CsvView.Metrics.MultilineContinuationRow
+--- @param skipped_ncol integer number of columns that start on previous lines of the record
 --- @return integer padding
-function View:_calculate_padding_for_multiline(lnum, row)
+function View:_calculate_padding_for_multiline(lnum, skipped_ncol)
   local padding = 0
   local spacing_left, spacing_right = get_spacing(self.opts.view.spacing, "left")
   local ranges = self.metrics:get_logical_row_fields({ lnum = lnum })
-  for i = row.skipped_ncol, 1, -1 do
+  for i = skipped_ncol, 1, -1 do
     local column = self.metrics:column(i)
     if column then
       padding = padding + math.max(column.max_width, self.opts.view.min_column_width) + spacing_right

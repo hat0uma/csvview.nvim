@@ -3,14 +3,19 @@ local nop = function() end
 local ColumnTracker = require("csvview.metrics_column")
 local Row = require("csvview.metrics_row")
 local RowMapper = require("csvview.metrics_row_mapper")
+local Store = require("csvview.metrics_store")
+
+local KIND = Store.KIND
+local display_width = strings.display_width
+local is_number = strings.is_number
 
 -----------------------------------------------------------------------------
 -- Metrics class
--- Coordinates row storage, column tracking, and line mapping
+-- Builds the store from parser events, and keeps column widths up to date
 -----------------------------------------------------------------------------
 
 --- @class CsvView.Metrics
---- @field private _rows CsvView.Metrics.Row[]
+--- @field store CsvView.MetricsStore read-only for callers
 --- @field private _columns CsvView.ColumnTracker
 --- @field private _mapper CsvView.RowMapper
 --- @field private _bufnr integer
@@ -18,6 +23,8 @@ local RowMapper = require("csvview.metrics_row_mapper")
 --- @field private _parser CsvView.Parser
 --- @field private _current_parse { cancelled: boolean }?
 local CsvViewMetrics = {}
+CsvViewMetrics.__index = CsvViewMetrics
+CsvViewMetrics.KIND = KIND
 
 --- Create new CsvViewMetrics instance
 ---@param bufnr integer
@@ -25,31 +32,19 @@ local CsvViewMetrics = {}
 ---@param parser CsvView.Parser
 ---@return CsvView.Metrics
 function CsvViewMetrics:new(bufnr, opts, parser)
-  self.__index = self
-
-  local obj = {}
+  local obj = setmetatable({}, self)
   obj._bufnr = bufnr
   obj._opts = opts
   obj._parser = parser
-  obj._rows = {}
-
-  -- Create row mapper with callbacks to access rows
-  local get_row = function(lnum)
-    return obj._rows[lnum]
-  end
-  local row_count = function()
-    return #obj._rows
-  end
-  obj._columns = ColumnTracker:new(get_row, row_count)
-  obj._mapper = RowMapper:new(get_row, row_count)
-  return setmetatable(obj, self)
+  obj.store = Store.new()
+  obj._columns = ColumnTracker:new(obj.store)
+  obj._mapper = RowMapper:new(obj.store)
+  return obj
 end
 
 --- Clear metrics
 function CsvViewMetrics:clear()
-  for _ = 1, #self._rows do
-    table.remove(self._rows)
-  end
+  self.store:clear()
   self._columns:clear()
 end
 
@@ -59,14 +54,14 @@ end
 ---@class CsvView.Metrics.RowGetOpts
 ---
 ---1-indexed line number. `lnum` is used when `row_idx` is not specified.
----TODO: Currently, `lnum` is same as `row_idx` because multi-line fields are not supported.
 ---@field lnum integer?
 ---
----1-indexed csv row index. `row_idx` is used when `lnum` is not specified.
+---1-indexed csv row index (comment lines are not counted). `row_idx` is used when `lnum` is not specified.
 ---@field row_idx integer?
 ---
 
---- Get row metrics
+--- Get row metrics.
+--- The returned row is a snapshot, valid until the next metrics update.
 ---@param opts CsvView.Metrics.RowGetOpts
 ---@return CsvView.Metrics.Row?
 function CsvViewMetrics:row(opts)
@@ -74,17 +69,17 @@ function CsvViewMetrics:row(opts)
   assert(opts.lnum or opts.row_idx, "opts.lnum or opts.row_idx is required")
   assert(not (opts.lnum and opts.row_idx), "opts.lnum and opts.row_idx are mutually exclusive")
 
-  if opts.lnum then
-    return self._rows[opts.lnum]
-  else
-    return self._mapper:get_row_by_row_idx(opts.row_idx)
+  local lnum = opts.lnum or self._mapper:row_idx_to_lnum(opts.row_idx)
+  if not lnum then
+    return nil
   end
+  return Row.new(self.store, lnum)
 end
 
---- Get the number of rows
+--- Get the number of rows (physical lines)
 ---@return integer
 function CsvViewMetrics:row_count()
-  return #self._rows
+  return self.store.n
 end
 
 --- Get column metrics
@@ -106,9 +101,9 @@ end
 --- Metrics are optimized to recalculate only the changed range.
 --- However, the entire column is recalculated in the following cases.
 ---   (1) If the line recorded as the maximum width of the column is deleted.
----       See: [MAX_ROW_DELETION] (in ColumnTracker:mark_dirty_on_row_delete)
+---       See: [MAX_ROW_DELETION] (in ColumnTracker:shift_rows)
 ---   (2) If a field was deleted and it was the maximum width in its column.
----       See: [MAX_FIELD_DELETION] (in ColumnTracker:mark_dirty_on_field_decrease)
+---       See: [MAX_FIELD_DELETION] (in ColumnTracker:mark_removed_fields)
 ---   (3) If the maximum width has shrunk.
 ---       See: [SHRINK_WIDTH] (in ColumnTracker:update_width)
 ---
@@ -127,12 +122,18 @@ function CsvViewMetrics:update(first, prev_last, last, on_end)
   -- Get the range of affected lines
   local start_reparse, end_reparse = self:_calculate_reparse_range(first, prev_last, last)
 
+  -- While the buffer is still being parsed for the first time, the store only
+  -- holds the lines parsed so far. Continue from its end so lines stay in order.
+  local store = self.store
+  start_reparse = math.min(start_reparse, store.n + 1)
+
   local delta = last - prev_last
-  if delta > 0 then
-    self:_add_row_placeholders(prev_last + 1, delta)
+  if delta > 0 and prev_last <= store.n then
+    store:insert_lines(prev_last + 1, delta)
+    self._columns:shift_rows(prev_last + 1, delta)
   elseif delta < 0 then
-    self:_remove_rows(last + 1, math.abs(delta))
-    self:_mark_recalculation_on_delete(prev_last, last)
+    store:remove_lines(last + 1, -delta)
+    self._columns:shift_rows(last + 1, delta)
   end
 
   -- update metrics
@@ -148,12 +149,12 @@ end
 function CsvViewMetrics:_calculate_reparse_range(first, prev_last, last)
   -- Calculate the range of logical CSV rows for the changed lines
   local start_reparse, end_reparse --- @type integer, integer
-  if (first + 1) <= #self._rows then
+  if (first + 1) <= self.store.n then
     -- if adding a new row before the last row
     local field_start_lnum, field_end_lnum = self._mapper:get_logical_row_range(first + 1)
     start_reparse = field_start_lnum
     end_reparse = math.max(field_end_lnum, last)
-  elseif first ~= 0 and first <= #self._rows then
+  elseif first ~= 0 and first <= self.store.n then
     -- if adding a new row at the end of the last row
     local field_start_lnum, field_end_lnum = self._mapper:get_logical_row_range(first)
     start_reparse = field_start_lnum
@@ -180,88 +181,100 @@ end
 ---@param endlnum integer? if present, compute only specified range
 ---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
-  -- State for building rows from parse events
-  local field_buffer = Row.FieldBuffer:new()
-  local line_field_counts = {} ---@type integer[]
-  local record_start_lnum = 0
+  local store = self.store
+  local columns = self._columns
 
-  -- Parse using parse_records with event callbacks
+  -- State of the record being parsed, per line relative to its first line.
+  local record_start = 0
+  local last_rel = -1 -- last line of the record that has a field so far
+  local line_base = {} ---@type integer[] pool index of the first field of the line
+  local line_count = {} ---@type integer[] number of fields on the line
+  local line_col0 = {} ---@type integer[] column index of the first field on the line, minus 1
+
+  --- Replace the layout of a line, keeping column widths up to date.
+  local function set_line(lnum, kind, base, count, col0, rel, span, term)
+    if store:has_line(lnum) then
+      columns:mark_removed_fields(lnum, store.col0[lnum], store.count[lnum], col0, count)
+    end
+    store:set_line(lnum, kind, base, count, col0, rel, span, term)
+
+    -- [SHRINK_WIDTH] is handled in ColumnTracker:update_width
+    local width = store.width
+    for i = 0, count - 1 do
+      columns:update_width(col0 + i + 1, lnum, width[base + i])
+    end
+  end
+
+  -- The range to parse. It grows while lines past it still belong to a record
+  -- that no longer exists (see `extend_over_stale_lines`).
+  local range_end = endlnum or vim.api.nvim_buf_line_count(self._bufnr)
+
+  --- A line after a record can never continue it. If the line after `lnum` is still
+  --- recorded as a continuation, it belongs to a record that this parse has
+  --- changed, so keep parsing until the stale lines are gone.
+  ---@param lnum integer last line of the record just parsed
+  ---@return integer range_end
+  local function extend_over_stale_lines(lnum)
+    local next_lnum = lnum + 1
+    if store:has_line(next_lnum) and store.kind[next_lnum] == KIND.MULTILINE_CONTINUATION then
+      range_end = math.max(range_end, next_lnum)
+    end
+    return range_end
+  end
+
   self._parser:parse_records(self._opts.parser.async_chunksize, {
     on_comment = function(lnum)
-      local prev_row = self._rows[lnum]
-      local row = Row.new_comment()
-      self._rows[lnum] = row
-      self:_mark_recalculation_on_decrease_fields(lnum, prev_row, row)
+      set_line(lnum, KIND.COMMENT, 0, 0, 0, 0, 0, true)
+      return extend_over_stale_lines(lnum)
     end,
 
     on_record_start = function(lnum)
-      -- clear record state
-      record_start_lnum = lnum
-      field_buffer:reset()
-      for k in pairs(line_field_counts) do
-        line_field_counts[k] = nil
+      record_start = lnum
+      last_rel = -1
+    end,
+
+    on_field = function(col_idx, lnum, line, offset, endpos)
+      local idx = store:push_field(
+        offset,
+        endpos - offset, -- endpos is 1-based end position, offset is 0-based start
+        display_width(line, offset, endpos),
+        is_number(line, offset, endpos)
+      )
+
+      local rel = lnum - record_start
+      if rel ~= last_rel then
+        last_rel = rel
+        line_base[rel] = idx
+        line_count[rel] = 1
+        line_col0[rel] = col_idx - 1
+      else
+        line_count[rel] = line_count[rel] + 1
       end
     end,
 
-    on_field = function(_, lnum, line, offset, endpos)
-      local len = endpos - offset -- endpos is 1-based end position, offset is 0-based start
-      local display_width = strings.display_width(line, offset, endpos)
-      local is_number = strings.is_number(line, offset, endpos)
-      field_buffer:add(offset, len, display_width, is_number)
+    on_record_end = function(record_start_lnum, record_end_lnum, terminated)
+      local is_multiline = record_start_lnum ~= record_end_lnum
 
-      -- field count per lines
-      local rel_idx = lnum - record_start_lnum
-      line_field_counts[rel_idx] = (line_field_counts[rel_idx] or 0) + 1
-    end,
-
-    on_record_end = function(record_start, record_end, terminated)
-      local new_endlnum = nil
-      local is_multiline = record_start ~= record_end
-      local current_skipped = 0
-
-      -- Track buffer offset as we consume fields for each row
-      local current_buffer_offset = 0
-      for lnum = record_start, record_end do
-        local prev_row = self._rows[lnum]
-
-        local rel_idx = lnum - record_start
-        local field_count = line_field_counts[rel_idx] or 0
-        local skipped_ncol = current_skipped
-
-        -- Create appropriate row type
-        local new_row --- @type CsvView.Metrics.Row
+      for lnum = record_start_lnum, record_end_lnum do
+        local rel = lnum - record_start_lnum
+        local kind ---@type integer
         if not is_multiline then
-          new_row = Row.new_singleline(field_count)
-        elseif lnum == record_start then
-          local endloffset = record_end - record_start
-          new_row = Row.new_multiline_start(field_count, endloffset, terminated)
+          kind = KIND.SINGLELINE
+        elseif rel == 0 then
+          kind = KIND.MULTILINE_START
         else
-          local start_loffset = lnum - record_start
-          local end_loffset = record_end - lnum
-          new_row = Row.new_multiline_continuation(field_count, start_loffset, end_loffset, skipped_ncol, terminated)
+          kind = KIND.MULTILINE_CONTINUATION
         end
 
-        -- Copy fields from buffer to row
-        field_buffer:copy_to_row(new_row, current_buffer_offset, field_count)
-        current_buffer_offset = current_buffer_offset + field_count
-
-        -- update skipped count
-        if field_count > 0 then
-          current_skipped = current_skipped + (field_count - 1)
+        if rel <= last_rel then
+          set_line(lnum, kind, line_base[rel], line_count[rel], line_col0[rel], rel, record_end_lnum - lnum, terminated)
+        else
+          -- line without fields (an empty line)
+          set_line(lnum, kind, 0, 0, 0, rel, record_end_lnum - lnum, terminated)
         end
-
-        self._rows[lnum] = new_row
-        if prev_row and prev_row.type == "multiline_start" and new_row.type == "multiline_continuation" then
-          -- If the structure of the multi-line field is broken, it affects all subsequent rows,
-          -- so all rows need to be recalculated.
-          new_endlnum = vim.api.nvim_buf_line_count(self._bufnr) - 1
-        end
-
-        self:_mark_recalculation_on_decrease_fields(lnum, prev_row, new_row)
-        self:_update_column_metrics_for_row(lnum)
       end
 
-      return new_endlnum
+      return extend_over_stale_lines(record_end_lnum)
     end,
 
     on_end = function(err)
@@ -271,117 +284,11 @@ function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
       end
 
       -- Recalculate dirty columns
-      self._columns:recalculate_dirty()
+      columns:recalculate_dirty()
+      store:maybe_compact()
       on_end()
     end,
   }, startlnum, endlnum, self._current_parse)
-end
-
---- Mark column for recalculation on delete
----@param prev_last integer
----@param last integer
-function CsvViewMetrics:_mark_recalculation_on_delete(prev_last, last)
-  -- [MAX_ROW_DELETION]
-  -- If the deleted line was the maximum line of the column, it is recalculated.
-  -- e.g.
-  -- before:
-  --    123456,12,12 <- delete this line
-  --    123,123,123
-  -- after:
-  --    123,123,123
-  --
-  -- -> prev_last = 1, last = 0
-  -- In this case, the column metrics for the first column need to be recalculated.
-  for col_idx, column in self._columns:iter() do
-    if column.max_row > last and column.max_row <= prev_last then
-      self._columns:mark_dirty(col_idx)
-    end
-  end
-end
-
---- Mark column for recalculation on decrease fields
----@param row_idx integer
----@param prev_row CsvView.Metrics.Row | nil
----@param curr_row CsvView.Metrics.Row
-function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row, curr_row)
-  -- [MAX_FIELD_DELETION]
-  -- If a field is deleted and it was the maximum width in its column, mark the column for recalculation.
-  -- e.g.
-  -- before:
-  --    123456,123456,123456
-  --    123,123,123
-  -- after:
-  --    123456,123456
-  --    123,123,123
-  --
-  -- In this case, the column metrics for the third column need to be recalculated.
-  if not prev_row then
-    return
-  end
-
-  for col_idx, _ in prev_row:iter() do
-    -- Check if the column exists and if the current row was the maximum width row for this column.
-    local column = self._columns:get(col_idx)
-    if column and column.max_row == row_idx then
-      local current_field = curr_row:field(col_idx)
-      if not current_field then
-        self._columns:mark_dirty(col_idx)
-      end
-    end
-  end
-end
-
---- Adjust column metrics for the specified row
----@param row_idx integer row index
-function CsvViewMetrics:_update_column_metrics_for_row(row_idx)
-  local row = self._rows[row_idx]
-
-  -- Update column metrics
-  -- [SHRINK_WIDTH] is handled in ColumnTracker:update_width
-  -- If the max width shrinks, the column is marked for recalculation.
-  for col_idx, field in row:iter() do
-    self._columns:update_width(col_idx, row_idx, field.display_width)
-  end
-end
-
---- Add row placeholders
----@param start integer
----@param num integer
-function CsvViewMetrics:_add_row_placeholders(start, num)
-  --
-  -- This function is equivalent to the following code, but is more efficient when editing large buffers.
-  --
-  -- for i = 1, num do
-  --   table.insert( self.rows, start, <placeholder> )
-  -- end
-  --
-
-  local len = #self._rows
-  for i = len, start, -1 do
-    self._rows[i + num] = self._rows[i]
-  end
-  for i = start, start + num - 1 do
-    self._rows[i] = Row.new_singleline(0)
-  end
-end
-
---- Remove rows
----@param start integer
----@param num integer
-function CsvViewMetrics:_remove_rows(start, num)
-  --
-  -- This function is equivalent to the following code, but is more efficient when editing large buffers.
-  --
-  -- for i = 1, num do
-  --   table.remove( self.rows, start )
-  -- end
-  --
-
-  local len = #self._rows
-  for i = start, len do
-    self._rows[i] = self._rows[i + num]
-    self._rows[i + num] = nil
-  end
 end
 
 --- Find the start of the logical row containing the given physical line number
@@ -434,8 +341,8 @@ end
 --- Get logical row count
 ---@return integer logical_row_count
 function CsvViewMetrics:row_count_logical()
-  if #self._rows > 0 then
-    return self._mapper:physical_to_logical(#self._rows) or 0
+  if self.store.n > 0 then
+    return self._mapper:physical_to_logical(self.store.n) or 0
   else
     return 0
   end

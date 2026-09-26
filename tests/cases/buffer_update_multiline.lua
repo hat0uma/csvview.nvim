@@ -223,7 +223,7 @@ return {
           },
         },
         expected = {
-          "ID     ,Name                          ,Address        ",
+          "ID     ,Name                          ,Address  ",
           '      1,"L01                          ',
           "        L02                           ",
           "        L03                           ",

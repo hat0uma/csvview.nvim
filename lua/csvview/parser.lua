@@ -367,7 +367,7 @@ function CsvViewParser:parse_line(lnum)
 end
 
 ---@class CsvView.Parser.RecordCallbacks
----@field on_comment fun(lnum: integer) called for comment lines
+---@field on_comment fun(lnum: integer): integer? called for comment lines. Returns new endlnum if needed.
 ---@field on_record_start fun(lnum: integer) called when a record starts
 ---@field on_field fun(col_idx: integer, lnum: integer, line: string, offset: integer, endpos: integer) called for each field
 ---@field on_record_end fun(startlnum: integer, endlnum: integer, terminated: boolean): integer? called when a record ends. Returns new endlnum if needed.
@@ -390,7 +390,7 @@ function CsvViewParser:parse_records(async_chunksize, cb, startlnum, endlnum, ca
   local events = {
     comment = function(lnum)
       current_record_end = lnum
-      cb.on_comment(lnum)
+      endlnum_override = cb.on_comment(lnum)
     end,
     record_start = function(lnum)
       cb.on_record_start(lnum)

@@ -2,107 +2,76 @@
 -- Row Mapper Module
 -- Responsible for mapping between physical line numbers and logical row indices
 -----------------------------------------------------------------------------
+local KIND = require("csvview.metrics_store").KIND
 
 --- @class CsvView.RowMapper
---- @field private _get_row fun(lnum: integer): CsvView.Metrics.Row? function to get row by physical line number
---- @field private _row_count fun(): integer function to get total row count
+--- @field private _store CsvView.MetricsStore
 local RowMapper = {}
+RowMapper.__index = RowMapper
 
 --- Create new RowMapper instance
----@param get_row fun(lnum: integer): CsvView.Metrics.Row? function to get row by physical line number
----@param row_count fun(): integer function to get total row count
+---@param store CsvView.MetricsStore
 ---@return CsvView.RowMapper
-function RowMapper:new(get_row, row_count)
-  self.__index = self
-  local obj = {
-    _get_row = get_row,
-    _row_count = row_count,
-  }
-  return setmetatable(obj, self)
+function RowMapper:new(store)
+  return setmetatable({ _store = store }, self)
 end
 
---- Get row by physical line number
----@param lnum integer 1-indexed physical line number
----@return CsvView.Metrics.Row?
-function RowMapper:_row(lnum)
-  return self._get_row(lnum)
-end
-
---- Check if row type is a logical row start
----@param row_type string
----@return boolean
-local function is_logical_row_start(row_type)
-  return row_type == "singleline" or row_type == "multiline_start" or row_type == "comment"
-end
-
---- Get logical row number from physical line number
+--- Get logical row number from physical line number.
+--- Comment lines count as logical rows.
 ---@param physical_lnum integer Physical line number (1-based)
 ---@return integer? logical_row_num Logical row number (1-based)
 function RowMapper:physical_to_logical(physical_lnum)
+  local store = self._store
+  if not store:has_line(physical_lnum) then
+    return nil -- Out of bounds
+  end
+
+  local kind = store.kind
   local logical_row_num = 0
-
   for i = 1, physical_lnum do
-    local row = self:_row(i)
-    if not row then
-      return nil -- Out of bounds
-    end
-
-    -- Count only the start of logical rows
-    if is_logical_row_start(row.type) then
+    if kind[i] ~= KIND.MULTILINE_CONTINUATION then
       logical_row_num = logical_row_num + 1
     end
   end
-
   return logical_row_num
 end
 
---- Get the physical line number for a logical row number
+--- Get the physical line number for a logical row number.
+--- Comment lines count as logical rows.
 ---@param logical_row_num integer Logical row number (1-based)
 ---@return integer? physical_lnum Physical line number (1-based)
 function RowMapper:logical_to_physical(logical_row_num)
+  local store = self._store
+  local kind = store.kind
   local logical_count = 0
-  local total_rows = self._row_count()
-
-  for i = 1, total_rows do
-    local row = self:_row(i)
-    if not row then
-      return nil
-    end
-
-    -- Count only the start of logical rows
-    if is_logical_row_start(row.type) then
+  for i = 1, store.n do
+    if kind[i] ~= KIND.MULTILINE_CONTINUATION then
       logical_count = logical_count + 1
       if logical_count == logical_row_num then
         return i
       end
     end
   end
-
   return nil -- Not found
 end
 
---- Get row by logical row index (1-indexed)
+--- Get the physical line number of a CSV row.
+--- Unlike `logical_to_physical`, comment lines are not counted.
 ---@param row_idx integer 1-indexed CSV row index
----@return CsvView.Metrics.Row?
-function RowMapper:get_row_by_row_idx(row_idx)
-  local logical_row_count = 0
-  local total_rows = self._row_count()
-
-  for i = 1, total_rows do
-    local row = self:_row(i)
-    if not row then
-      return nil
-    end
-
-    -- Count only the start of logical rows
-    if row.type == "singleline" or row.type == "multiline_start" then
-      logical_row_count = logical_row_count + 1
-      if logical_row_count == row_idx then
-        return row
+---@return integer? lnum
+function RowMapper:row_idx_to_lnum(row_idx)
+  local store = self._store
+  local kind = store.kind
+  local count = 0
+  for i = 1, store.n do
+    local k = kind[i]
+    if k == KIND.SINGLELINE or k == KIND.MULTILINE_START then
+      count = count + 1
+      if count == row_idx then
+        return i
       end
     end
   end
-
   return nil -- Row not found
 end
 
@@ -110,24 +79,16 @@ end
 ---@param lnum integer physical line number
 ---@return integer logical_start_lnum, integer logical_end_lnum
 function RowMapper:get_logical_row_range(lnum)
-  local row = self:_row(lnum)
-  if not row then
+  local store = self._store
+  if not store:has_line(lnum) then
     error(string.format("Row out of bounds lnum=%d", lnum))
   end
 
-  if row.type == "multiline_continuation" then
-    local start_lnum = lnum - row.start_loffset
-    local start_row = self:_row(start_lnum)
-    if not start_row then
-      error(string.format("Start row not found for lnum=%d", lnum))
-    end
-    local endlnum = start_lnum + start_row.end_loffset
-    return start_lnum, endlnum
-  elseif row.type == "multiline_start" then
-    return lnum, lnum + row.end_loffset
-  else
-    return lnum, lnum
+  local start_lnum, end_lnum = lnum - store.rel[lnum], lnum + store.span[lnum]
+  if not store:has_line(start_lnum) or not store:has_line(end_lnum) then
+    error(string.format("Logical row out of bounds lnum=%d start=%d end=%d", lnum, start_lnum, end_lnum))
   end
+  return start_lnum, end_lnum
 end
 
 --- @alias CsvView.Metrics.LogicalFieldRange { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
@@ -136,52 +97,31 @@ end
 ---@param lnum integer physical line number
 ---@return CsvView.Metrics.LogicalFieldRange[] ranges List of logical field ranges for the row
 function RowMapper:get_logical_row_fields(lnum)
-  local row = self:_row(lnum)
-  if not row then
+  local store = self._store
+  if not store:has_line(lnum) then
     error(string.format("Row not found for lnum=%d", lnum))
   end
 
   local ranges = {} --- @type CsvView.Metrics.LogicalFieldRange[]
-
-  -- Handle comment or empty rows
-  if row.type == "comment" or row:field_count() == 0 then
+  if store.kind[lnum] == KIND.COMMENT then
     return ranges
   end
 
-  if row.type == "singleline" then
-    for _, field in row:iter() do
-      local start_col = field.offset
-      local range = { --- @type CsvView.Metrics.LogicalFieldRange
-        start_row = lnum,
-        start_col = start_col,
-        end_row = lnum,
-        end_col = math.max(field.offset + field.len, start_col),
-      }
-      table.insert(ranges, range)
-    end
-    return ranges
-  end
-
-  -- Handle multi-line rows
-  local logical_start_lnum, logical_end_lnum = self:get_logical_row_range(lnum)
-  for i = logical_start_lnum, logical_end_lnum do
-    local logical_row = self:_row(i)
-    if not logical_row then
-      error(string.format("Logical row not found for lnum=%d", i))
-    end
-
-    for col_idx, field in logical_row:iter() do
-      if not ranges[col_idx] then
-        ranges[col_idx] = { --- @type CsvView.Metrics.LogicalFieldRange
-          start_row = i,
-          start_col = field.offset,
-          end_row = i,
-          end_col = field.offset + field.len,
-        }
+  local off, len = store.off, store.len
+  local start_lnum, end_lnum = self:get_logical_row_range(lnum)
+  for i = start_lnum, end_lnum do
+    local base, col0 = store.base[i], store.col0[i]
+    for j = 0, store.count[i] - 1 do
+      local col_idx = col0 + j + 1
+      local offset = off[base + j]
+      local end_col = offset + len[base + j]
+      local range = ranges[col_idx]
+      if not range then
+        ranges[col_idx] = { start_row = i, start_col = offset, end_row = i, end_col = end_col }
       else
-        -- Extend the end row and column if this field continues on the same logical row
-        ranges[col_idx].end_row = i
-        ranges[col_idx].end_col = field.offset + field.len
+        -- The field continues from the previous line
+        range.end_row = i
+        range.end_col = end_col
       end
     end
   end
