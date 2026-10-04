@@ -144,7 +144,21 @@ function prototype.field_count(row)
   return row._field_count
 end
 
+--- Get the column index offset of the first field in the row.
+--- The column index of the n-th (1-based) field is `row:col_offset() + n`.
+---@param row CsvView.Metrics._RowStruct
+---@return integer
+function prototype.col_offset(row)
+  if row._type == ROW_TYPE.MULTILINE_CONTINUATION then
+    return row._skipped_ncol
+  else
+    return 0
+  end
+end
+
 --- Iterate over fields in the row
+--- NOTE: This creates a closure, which LuaJIT cannot compile (NYI: FNEW).
+--- In hot paths, loop over `row:col_offset() + 1 .. row:col_offset() + row:field_count()` with `row:field()` instead.
 ---@param row CsvView.Metrics._RowStruct
 ---@return fun(): integer?, CsvView.Metrics.Field?
 function prototype.iter(row)

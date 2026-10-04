@@ -261,13 +261,23 @@ end)
 --- 2. Prefix check: If the line starts with any prefix in `opts.parser.comments`,
 ---    it is considered a comment (e.g., "#", "//").
 ---
+--- The function is cached per option values, so the same options always return the same function.
+--- This is called for every line while parsing, and LuaJIT specializes traces to the called closure,
+--- so recreating it for every parse would invalidate the compiled traces.
+---
 ---@param opts CsvView.InternalOptions
 ---@return fun(lnum: integer, line: string): boolean
 function M.create_is_comment(opts)
   local comment_lines = opts.parser.comment_lines
-  local comments = opts.parser.comments
+  local comments = vim.deepcopy(opts.parser.comments or {})
 
-  return function(lnum, line)
+  local key = tostring(comment_lines) .. "\0" .. table.concat(comments, "\0")
+  local cached = M._is_comment_cache[key]
+  if cached then
+    return cached
+  end
+
+  local fn = function(lnum, line)
     -- check comment section
     if comment_lines and lnum <= comment_lines then
       return true
@@ -280,7 +290,12 @@ function M.create_is_comment(opts)
     end
     return false
   end
+  M._is_comment_cache[key] = fn
+  return fn
 end
+
+---@type table<string, fun(lnum: integer, line: string): boolean>
+M._is_comment_cache = {}
 
 --- Resolve delimiter character
 ---@param bufnr integer
