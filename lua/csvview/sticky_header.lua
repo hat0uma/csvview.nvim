@@ -7,13 +7,12 @@ M._sticky_header_wins = {} --- @type table<integer,integer> winid -> sticky-head
 --- Sync the horizontal scroll of the sticky header window with the main window.
 ---@param winid integer csvview attached window
 ---@param header_winid integer sticky-header window
----@param header_lnum integer header line number
-local function sync_horizontal_scroll(winid, header_winid, header_lnum)
+local function sync_horizontal_scroll(winid, header_winid)
   local win_view = vim.api.nvim_win_call(winid, vim.fn.winsaveview) ---@type vim.fn.winsaveview.ret
   vim.api.nvim_win_call(header_winid, function()
     local current = vim.fn.winsaveview()
-    if current.leftcol ~= win_view.leftcol or current.lnum ~= header_lnum then
-      vim.fn.winrestview({ topline = header_lnum, lnum = header_lnum, leftcol = win_view.leftcol })
+    if current.leftcol ~= win_view.leftcol or current.lnum ~= 1 then
+      vim.fn.winrestview({ topline = 1, lnum = 1, leftcol = win_view.leftcol })
     end
   end)
 end
@@ -44,7 +43,7 @@ local function show_sticky_header(winid, view)
     win = winid,
     relative = "win",
     width = win_width,
-    height = 1,
+    height = view.header_lnum,
     row = 0,
     col = 0,
     focusable = false,
@@ -97,7 +96,8 @@ local function should_show_sticky_header(winid, view)
   -- Hide if the cursor overlaps with the sticky header drawing position
   -- Also hide if it overlaps with the separator.
   local cur_lnum = vim.fn.line(".", winid)
-  local header_bot_lnum = top_lnum + (view.opts.view.sticky_header.separator and 1 or 0)
+  local header_height = view.header_lnum
+  local header_bot_lnum = top_lnum + header_height - 1 + (view.opts.view.sticky_header.separator and 1 or 0)
   if cur_lnum <= header_bot_lnum then
     return false
   end
@@ -145,7 +145,7 @@ function M.redraw()
     local view = win_overlay.get_opened_csvview(winid)
     if view and should_show_sticky_header(winid, view) then
       show_sticky_header(winid, view)
-      sync_horizontal_scroll(winid, M._sticky_header_wins[winid], view.header_lnum)
+      sync_horizontal_scroll(winid, M._sticky_header_wins[winid])
     else
       M.close_header_win_for(winid)
     end
