@@ -175,106 +175,153 @@ function CsvViewMetrics:_calculate_reparse_range(first, prev_last, last)
   return start_reparse, end_reparse
 end
 
+-----------------------------------------------------------------------------
+-- MetricsBuilder: parser event handler that builds rows and column metrics
+--
+-- NOTE: This is implemented as an object with methods rather than closures.
+-- LuaJIT specializes traces to the closure objects being called, so closures recreated for every parse
+-- would invalidate the traces compiled during the first parse. See also the note in parser.lua.
+-----------------------------------------------------------------------------
+
+--- @class CsvView.MetricsBuilder: CsvView.Parser.RecordsHandler
+--- @field private _metrics CsvView.Metrics
+--- @field private _field_buffer CsvView.FieldBuffer
+--- @field private _line_field_counts integer[]
+--- @field private _record_start_lnum integer
+--- @field private _on_end fun(err:string|nil)
+local MetricsBuilder = {}
+MetricsBuilder.__index = MetricsBuilder
+
+-- MetricsBuilder is a part of CsvView.Metrics and accesses its private members.
+---@diagnostic disable: invisible
+
+---@param metrics CsvView.Metrics
+---@param on_end fun(err:string|nil)
+---@return CsvView.MetricsBuilder
+function MetricsBuilder:new(metrics, on_end)
+  local obj = setmetatable({}, self)
+  obj._metrics = metrics
+  obj._field_buffer = Row.FieldBuffer:new()
+  obj._line_field_counts = {}
+  obj._record_start_lnum = 0
+  obj._on_end = on_end
+  return obj
+end
+
+---@param lnum integer
+function MetricsBuilder:on_comment(lnum)
+  local metrics = self._metrics
+  local prev_row = metrics._rows[lnum]
+  local row = Row.new_comment()
+  metrics._rows[lnum] = row
+  metrics:_mark_recalculation_on_decrease_fields(lnum, prev_row, row)
+end
+
+---@param lnum integer
+function MetricsBuilder:on_record_start(lnum)
+  -- clear record state
+  self._record_start_lnum = lnum
+  self._field_buffer:reset()
+  local line_field_counts = self._line_field_counts
+  for k in pairs(line_field_counts) do
+    line_field_counts[k] = nil
+  end
+end
+
+---@param lnum integer
+---@param line string
+---@param offset integer
+---@param endpos integer
+function MetricsBuilder:on_field(_, lnum, line, offset, endpos)
+  local len = endpos - offset -- endpos is 1-based end position, offset is 0-based start
+  local display_width = strings.display_width(line, offset, endpos)
+  local is_number = strings.is_number(line, offset, endpos)
+  self._field_buffer:add(offset, len, display_width, is_number)
+
+  -- field count per lines
+  local line_field_counts = self._line_field_counts
+  local rel_idx = lnum - self._record_start_lnum
+  line_field_counts[rel_idx] = (line_field_counts[rel_idx] or 0) + 1
+end
+
+---@param record_start integer
+---@param record_end integer
+---@param terminated boolean
+---@return integer? new_endlnum
+function MetricsBuilder:on_record_end(record_start, record_end, terminated)
+  local metrics = self._metrics
+  local field_buffer = self._field_buffer
+  local line_field_counts = self._line_field_counts
+  local new_endlnum = nil
+  local is_multiline = record_start ~= record_end
+  local current_skipped = 0
+
+  -- Track buffer offset as we consume fields for each row
+  local current_buffer_offset = 0
+  for lnum = record_start, record_end do
+    local prev_row = metrics._rows[lnum]
+
+    local rel_idx = lnum - record_start
+    local field_count = line_field_counts[rel_idx] or 0
+    local skipped_ncol = current_skipped
+
+    -- Create appropriate row type
+    local new_row --- @type CsvView.Metrics.Row
+    if not is_multiline then
+      new_row = Row.new_singleline(field_count)
+    elseif lnum == record_start then
+      local endloffset = record_end - record_start
+      new_row = Row.new_multiline_start(field_count, endloffset, terminated)
+    else
+      local start_loffset = lnum - record_start
+      local end_loffset = record_end - lnum
+      new_row = Row.new_multiline_continuation(field_count, start_loffset, end_loffset, skipped_ncol, terminated)
+    end
+
+    -- Copy fields from buffer to row
+    field_buffer:copy_to_row(new_row, current_buffer_offset, field_count)
+    current_buffer_offset = current_buffer_offset + field_count
+
+    -- update skipped count
+    if field_count > 0 then
+      current_skipped = current_skipped + (field_count - 1)
+    end
+
+    metrics._rows[lnum] = new_row
+    if prev_row and prev_row.type == "multiline_start" and new_row.type == "multiline_continuation" then
+      -- If the structure of the multi-line field is broken, it affects all subsequent rows,
+      -- so all rows need to be recalculated.
+      new_endlnum = vim.api.nvim_buf_line_count(metrics._bufnr) - 1
+    end
+
+    metrics:_mark_recalculation_on_decrease_fields(lnum, prev_row, new_row)
+    metrics:_update_column_metrics_for_row(lnum)
+  end
+
+  return new_endlnum
+end
+
+---@param err string?
+function MetricsBuilder:on_end(err)
+  if err then
+    self._on_end(err)
+    return
+  end
+
+  -- Recalculate dirty columns
+  self._metrics._columns:recalculate_dirty()
+  self._on_end()
+end
+
+---@diagnostic enable: invisible
+
 --- Compute metrics
 ---@param startlnum integer? if present, compute only specified range
 ---@param endlnum integer? if present, compute only specified range
 ---@param on_end fun(err:string|nil) callback for when the update is complete
 function CsvViewMetrics:_compute_metrics(startlnum, endlnum, on_end)
-  -- State for building rows from parse events
-  local field_buffer = Row.FieldBuffer:new()
-  local line_field_counts = {} ---@type integer[]
-  local record_start_lnum = 0
-
-  -- Parse using parse_records with event callbacks
-  self._parser:parse_records(self._opts.parser.async_chunksize, {
-    on_comment = function(lnum)
-      local prev_row = self._rows[lnum]
-      local row = Row.new_comment()
-      self._rows[lnum] = row
-      self:_mark_recalculation_on_decrease_fields(lnum, prev_row, row)
-    end,
-
-    on_record_start = function(lnum)
-      -- clear record state
-      record_start_lnum = lnum
-      field_buffer:reset()
-      for k in pairs(line_field_counts) do
-        line_field_counts[k] = nil
-      end
-    end,
-
-    on_field = function(_, lnum, line, offset, endpos)
-      local len = endpos - offset -- endpos is 1-based end position, offset is 0-based start
-      local display_width = strings.display_width(line, offset, endpos)
-      local is_number = strings.is_number(line, offset, endpos)
-      field_buffer:add(offset, len, display_width, is_number)
-
-      -- field count per lines
-      local rel_idx = lnum - record_start_lnum
-      line_field_counts[rel_idx] = (line_field_counts[rel_idx] or 0) + 1
-    end,
-
-    on_record_end = function(record_start, record_end, terminated)
-      local new_endlnum = nil
-      local is_multiline = record_start ~= record_end
-      local current_skipped = 0
-
-      -- Track buffer offset as we consume fields for each row
-      local current_buffer_offset = 0
-      for lnum = record_start, record_end do
-        local prev_row = self._rows[lnum]
-
-        local rel_idx = lnum - record_start
-        local field_count = line_field_counts[rel_idx] or 0
-        local skipped_ncol = current_skipped
-
-        -- Create appropriate row type
-        local new_row --- @type CsvView.Metrics.Row
-        if not is_multiline then
-          new_row = Row.new_singleline(field_count)
-        elseif lnum == record_start then
-          local endloffset = record_end - record_start
-          new_row = Row.new_multiline_start(field_count, endloffset, terminated)
-        else
-          local start_loffset = lnum - record_start
-          local end_loffset = record_end - lnum
-          new_row = Row.new_multiline_continuation(field_count, start_loffset, end_loffset, skipped_ncol, terminated)
-        end
-
-        -- Copy fields from buffer to row
-        field_buffer:copy_to_row(new_row, current_buffer_offset, field_count)
-        current_buffer_offset = current_buffer_offset + field_count
-
-        -- update skipped count
-        if field_count > 0 then
-          current_skipped = current_skipped + (field_count - 1)
-        end
-
-        self._rows[lnum] = new_row
-        if prev_row and prev_row.type == "multiline_start" and new_row.type == "multiline_continuation" then
-          -- If the structure of the multi-line field is broken, it affects all subsequent rows,
-          -- so all rows need to be recalculated.
-          new_endlnum = vim.api.nvim_buf_line_count(self._bufnr) - 1
-        end
-
-        self:_mark_recalculation_on_decrease_fields(lnum, prev_row, new_row)
-        self:_update_column_metrics_for_row(lnum)
-      end
-
-      return new_endlnum
-    end,
-
-    on_end = function(err)
-      if err then
-        on_end(err)
-        return
-      end
-
-      -- Recalculate dirty columns
-      self._columns:recalculate_dirty()
-      on_end()
-    end,
-  }, startlnum, endlnum, self._current_parse)
+  local builder = MetricsBuilder:new(self, on_end)
+  self._parser:parse_records(self._opts.parser.async_chunksize, builder, startlnum, endlnum, self._current_parse)
 end
 
 --- Mark column for recalculation on delete
@@ -319,7 +366,8 @@ function CsvViewMetrics:_mark_recalculation_on_decrease_fields(row_idx, prev_row
     return
   end
 
-  for col_idx, _ in prev_row:iter() do
+  local col_offset = prev_row:col_offset()
+  for col_idx = col_offset + 1, col_offset + prev_row:field_count() do
     -- Check if the column exists and if the current row was the maximum width row for this column.
     local column = self._columns:get(col_idx)
     if column and column.max_row == row_idx then
@@ -339,7 +387,9 @@ function CsvViewMetrics:_update_column_metrics_for_row(row_idx)
   -- Update column metrics
   -- [SHRINK_WIDTH] is handled in ColumnTracker:update_width
   -- If the max width shrinks, the column is marked for recalculation.
-  for col_idx, field in row:iter() do
+  local col_offset = row:col_offset()
+  for col_idx = col_offset + 1, col_offset + row:field_count() do
+    local field = row:field(col_idx) ---@cast field -nil
     self._columns:update_width(col_idx, row_idx, field.display_width)
   end
 end
